@@ -161,16 +161,14 @@ app.post("/download", (req, res) => {
 
   console.log(`Bắt đầu tải file với ID: ${downloadId}`);
   console.log("URL:", url);
-  console.log(
-    "Loại link:",
-    isDirectM3U8 ? "M3U8 trực tiếp" : "Link thông thường"
-  );
+  console.log("Loại link:", isDirectM3U8 ? "M3U8 trực tiếp" : "Link thông thường");
 
   // Khởi tạo tiến trình
   downloadProgress.set(downloadId, {
     status: "downloading",
     progress: 0,
     message: "Đang chuẩn bị tải...",
+    lastUpdate: Date.now()
   });
 
   const prefix = getNextNumber();
@@ -183,7 +181,8 @@ app.post("/download", (req, res) => {
   // Tùy chỉnh lệnh tải dựa vào loại URL
   let cmd;
   if (isDirectM3U8) {
-    cmd = `python -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0'" -o "${outputTemplate}" --no-check-certificates --newline`;
+    // Thêm các tùy chọn để xử lý HLS tốt hơn
+    cmd = `python -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0' -c copy -bsf:a aac_adtstoasc" -o "${outputTemplate}" --no-check-certificates --newline --retries 10 --fragment-retries 10 --hls-prefer-native`;
   } else {
     cmd = `python -m yt_dlp "${url}" -f "best" -o "${outputTemplate}" --no-check-certificates --newline`;
   }
@@ -207,6 +206,7 @@ app.post("/download", (req, res) => {
 
     // Biến để lưu tên file thực tế khi tiến trình hoàn tất
     let actualFilename = null;
+    let lastProgressUpdate = Date.now();
 
     process.stdout.on("data", (data) => {
       console.log(`[${downloadId}] Output:`, data);
@@ -223,40 +223,15 @@ app.post("/download", (req, res) => {
         const progressMatch = data.match(/\[download\]\s+(\d+\.\d+)%/);
         if (progressMatch) {
           const progress = parseFloat(progressMatch[1]);
-          downloadProgress.set(downloadId, {
-            status: "downloading",
-            progress: progress,
-            message: `Đang tải: ${progress.toFixed(1)}%`,
-          });
-          // Nếu đã có tiến độ tải, đánh dấu là đang tải thành công
-          if (progress > 0) {
-            const processInfo = activeProcesses.get(downloadId);
-            if (processInfo) {
-              processInfo.isDownloading = true;
-            }
-          }
-        }
-      } else if (data.includes("frame=")) {
-        // Xử lý output của FFmpeg
-        const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
-        const sizeMatch = data.match(/size=\s*(\d+)kB/);
-        const speedMatch = data.match(/speed=([\d.]+)x/);
-        
-        if (timeMatch || sizeMatch) {
-          let message = "Đang xử lý:";
-          if (timeMatch) message += ` ${timeMatch[1]}`;
-          if (sizeMatch) message += ` (${sizeMatch[1]}KB)`;
-          if (speedMatch) message += ` tốc độ ${speedMatch[1]}x`;
-          
-          downloadProgress.set(downloadId, {
-            status: "downloading",
-            progress: -1, // Không có phần trăm chính xác
-            message: message,
-          });
-          
-          const processInfo = activeProcesses.get(downloadId);
-          if (processInfo) {
-            processInfo.isDownloading = true;
+          const now = Date.now();
+          if (now - lastProgressUpdate > 1000) { // Cập nhật mỗi giây
+            downloadProgress.set(downloadId, {
+              status: "downloading",
+              progress: progress,
+              message: `Đang tải: ${progress.toFixed(1)}%`,
+              lastUpdate: now
+            });
+            lastProgressUpdate = now;
           }
         }
       }
@@ -264,6 +239,43 @@ app.post("/download", (req, res) => {
 
     process.stderr.on("data", (data) => {
       console.log(`[${downloadId}] stderr:`, data);
+      
+      // Xử lý thông tin từ FFmpeg
+      const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
+      const sizeMatch = data.match(/size=\s*(\d+)kB/);
+      const speedMatch = data.match(/speed=([\d.]+)x/);
+      
+      if (timeMatch || sizeMatch || speedMatch) {
+        let message = "Đang xử lý:";
+        if (timeMatch) message += ` ${timeMatch[1]}`;
+        if (sizeMatch) message += ` (${sizeMatch[1]}KB)`;
+        if (speedMatch) message += ` tốc độ ${speedMatch[1]}x`;
+        
+        const now = Date.now();
+        if (now - lastProgressUpdate > 1000) {
+          downloadProgress.set(downloadId, {
+            status: "downloading",
+            progress: -1, // Không có phần trăm chính xác
+            message: message,
+            lastUpdate: now
+          });
+          lastProgressUpdate = now;
+        }
+      }
+
+      // Kiểm tra lỗi HLS
+      if (data.includes("Opening 'crypto+") || data.includes("[hls @")) {
+        const now = Date.now();
+        if (now - lastProgressUpdate > 1000) {
+          downloadProgress.set(downloadId, {
+            status: "downloading",
+            progress: -1,
+            message: "Đang giải mã video...",
+            lastUpdate: now
+          });
+          lastProgressUpdate = now;
+        }
+      }
     });
 
     process.on("close", (code) => {
@@ -293,21 +305,24 @@ app.post("/download", (req, res) => {
             status: "completed",
             progress: 100,
             message: "✅ Tải hoàn tất!",
-            filename: foundFile
+            filename: foundFile,
+            lastUpdate: Date.now()
           });
           console.log(`File đã tải: ${foundFile}`);
         } else {
           downloadProgress.set(downloadId, {
             status: "error",
             progress: 0,
-            message: "❓ Hoàn tất nhưng không tìm thấy file"
+            message: "❓ Hoàn tất nhưng không tìm thấy file",
+            lastUpdate: Date.now()
           });
         }
       } else {
         downloadProgress.set(downloadId, {
           status: "error",
           progress: 0,
-          message: `❌ Lỗi khi tải file (Mã lỗi: ${code})`
+          message: `❌ Lỗi khi tải file (Mã lỗi: ${code})`,
+          lastUpdate: Date.now()
         });
       }
       
