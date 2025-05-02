@@ -44,4 +44,9 @@ temp/
 
 # System files
 Thumbs.db
-desktop.ini 
+desktop.ini
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc 
