@@ -12,7 +12,7 @@ const app = express();
 app.use(
   cors({
     origin: "*",
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "DELETE"],
     allowedHeaders: ["Content-Type", "Range"],
     exposedHeaders: ["Content-Range", "Content-Length", "Accept-Ranges"],
   })
@@ -24,17 +24,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Tạo thư mục downloads nếu chưa có
-const downloadsDir = "/home/download/downloads"; // Đường dẫn tuyệt đối
+const downloadsDir = path.join(__dirname, "downloads");
 if (!fs.existsSync(downloadsDir)) {
-  try {
-    fs.mkdirSync(downloadsDir, { recursive: true });
-    console.log("📁 Đã tạo thư mục downloads tại:", downloadsDir);
-  } catch (error) {
-    console.error("❌ Lỗi khi tạo thư mục downloads:", error);
-    process.exit(1);
-  }
+  fs.mkdirSync(downloadsDir);
+  console.log("📁 Đã tạo thư mục downloads");
 } else {
-  console.log("✅ Thư mục downloads đã tồn tại tại:", downloadsDir);
+  console.log("✅ Thư mục downloads đã tồn tại");
 }
 
 // Giao diện tĩnh từ thư mục public
@@ -52,17 +47,7 @@ let downloadCount = 0;
 const activeProcesses = new Map();
 
 // Cấu hình multer để lưu file tạm thời
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, downloadsDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage: storage });
+const upload = multer({ dest: 'uploads/' });
 
 // Hàm lấy số thứ tự tiếp theo
 function getNextNumber() {
@@ -70,34 +55,9 @@ function getNextNumber() {
   return String(downloadCount).padStart(3, "0"); // Format: 001, 002, ...
 }
 
-// Hàm tạo tên file an toàn
-function createSafeFilename(title) {
-  // Loại bỏ các ký tự không hợp lệ trong tên file
-  return title.replace(/[<>:"/\\|?*]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/[^\w\-_]/g, '');
-}
-
-// Hàm kiểm tra và tạo tên file duy nhất
-function getUniqueFileName(baseDir, title, ext) {
-  const safeTitle = createSafeFilename(title);
-  const prefix = getNextNumber();
-  const baseName = `${prefix}_${safeTitle}`;
-  let counter = 0;
-  let fileName = `${baseName}${ext}`;
-  let fullPath = path.join(baseDir, fileName);
-
-  // Kiểm tra nếu file đã tồn tại
-  while (fs.existsSync(fullPath)) {
-    counter++;
-    fileName = `${baseName}_${counter}${ext}`;
-    fullPath = path.join(baseDir, fileName);
-  }
-
-  return {
-    fileName: fileName,
-    fullPath: fullPath
-  };
+// Hàm kiểm tra và tạo tên file an toàn
+function getSafeFilename(name) {
+  return name.replace(/[^a-zA-Z0-9_.-]/g, '_');
 }
 
 // Hàm để kiểm tra process còn chạy không
@@ -156,13 +116,36 @@ function killProcessTree(processInfo) {
   }
 }
 
-// Cấu hình domain và đường dẫn
-const DOMAIN = "https://tai.minhthuan.site";
-const DOWNLOAD_PATH = "/downloads";
-
-// Hàm tạo đường dẫn tải về
-function createDownloadUrl(fileName) {
-  return `${DOMAIN}${DOWNLOAD_PATH}/${encodeURIComponent(fileName)}`;
+// Hàm kiểm tra file tồn tại trong thư mục download
+function findActualFile(baseFileName) {
+  // Kiểm tra xem có file nào tương ứng trong thư mục downloads
+  const files = fs.readdirSync(downloadsDir);
+  
+  // Tìm file có chứa prefix số trong tên
+  const prefixMatch = baseFileName.match(/^(\d+)_/);
+  if (prefixMatch) {
+    const prefix = prefixMatch[1];
+    // Tìm các file có prefix giống nhau
+    const matchingFiles = files.filter(file => file.startsWith(prefix + '_'));
+    if (matchingFiles.length > 0) {
+      return matchingFiles[0]; // Trả về file đầu tiên trùng prefix
+    }
+  }
+  
+  // Tìm file trực tiếp
+  if (files.includes(baseFileName)) {
+    return baseFileName;
+  }
+  
+  // Tìm file có tên tương tự (không phân biệt đuôi file)
+  const baseWithoutExt = path.basename(baseFileName, path.extname(baseFileName));
+  for (const file of files) {
+    if (file.includes(baseWithoutExt)) {
+      return file;
+    }
+  }
+  
+  return null;
 }
 
 app.post("/download", (req, res) => {
@@ -178,185 +161,171 @@ app.post("/download", (req, res) => {
 
   console.log(`Bắt đầu tải file với ID: ${downloadId}`);
   console.log("URL:", url);
-  console.log("Loại link:", isDirectM3U8 ? "M3U8 trực tiếp" : "Link thông thường");
+  console.log(
+    "Loại link:",
+    isDirectM3U8 ? "M3U8 trực tiếp" : "Link thông thường"
+  );
 
   // Khởi tạo tiến trình
   downloadProgress.set(downloadId, {
     status: "downloading",
     progress: 0,
-    message: "Đang tải...",
+    message: "Đang chuẩn bị tải...",
   });
 
-  // Tạo template cho tên file với số thứ tự
-  const { fileName, fullPath } = getUniqueFileName(downloadsDir, "video", ".mp4");
-  const outputPath = fullPath;
+  const prefix = getNextNumber();
+  // Sử dụng output template đơn giản hơn để tránh lỗi với tên file phức tạp
+  const outputTemplate = path.join(
+    downloadsDir,
+    `${prefix}_video.%(ext)s`
+  );
 
   // Tùy chỉnh lệnh tải dựa vào loại URL
   let cmd;
   if (isDirectM3U8) {
-    cmd = `python3 -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0'" -o "${outputPath}" --no-check-certificates --newline`;
+    cmd = `python -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0'" -o "${outputTemplate}" --no-check-certificates --newline`;
   } else {
-    // Sử dụng format "best" để tải file tốt nhất có thể
-    cmd = `python3 -m yt_dlp "${url}" -f "best" -o "${outputPath}" --no-check-certificates --newline`;
+    cmd = `python -m yt_dlp "${url}" -f "best" -o "${outputTemplate}" --no-check-certificates --newline`;
   }
 
-  // Kiểm tra xem yt-dlp đã được cài đặt chưa
-  exec("python3 -m pip list | grep yt-dlp", (error, stdout, stderr) => {
-    if (error || !stdout.includes("yt-dlp")) {
-      console.log("📥 Đang cài đặt yt-dlp...");
-      exec("python3 -m pip install yt-dlp", (installError, installStdout, installStderr) => {
-        if (installError) {
-          console.error("❌ Lỗi khi cài đặt yt-dlp:", installError);
+  try {
+    console.log("Lệnh tải:", cmd);
+    const process = exec(cmd);
+    console.log(`Tiến trình tải được tạo với ID: ${downloadId}, PID: ${process.pid}`);
+
+    // Lưu thông tin process để có thể hủy sau này
+    activeProcesses.set(downloadId, {
+      process: process,
+      outputTemplate: outputTemplate,
+      url: url,
+      startTime: Date.now(),
+      isDownloading: false,
+      pid: process.pid,
+      cmd: cmd,
+      prefix: prefix
+    });
+
+    // Biến để lưu tên file thực tế khi tiến trình hoàn tất
+    let actualFilename = null;
+
+    process.stdout.on("data", (data) => {
+      console.log(`[${downloadId}] Output:`, data);
+      
+      // Theo dõi tên file đang được tạo
+      const filenameMatch = data.match(/\[download\] Destination: (.+)/);
+      if (filenameMatch) {
+        actualFilename = path.basename(filenameMatch[1]);
+        console.log(`Đang tải file: ${actualFilename}`);
+      }
+
+      // Cập nhật tiến trình từ output
+      if (data.includes("[download]")) {
+        const progressMatch = data.match(/\[download\]\s+(\d+\.\d+)%/);
+        if (progressMatch) {
+          const progress = parseFloat(progressMatch[1]);
           downloadProgress.set(downloadId, {
-            status: "error",
-            progress: 0,
-            message: "❌ Lỗi: Không thể cài đặt yt-dlp",
+            status: "downloading",
+            progress: progress,
+            message: `Đang tải: ${progress.toFixed(1)}%`,
           });
-          return res.json({
-            success: false,
-            message: "❌ Lỗi: Không thể cài đặt yt-dlp",
-          });
-        }
-        console.log("✅ Đã cài đặt yt-dlp thành công");
-        startDownload();
-      });
-    } else {
-      console.log("✅ yt-dlp đã được cài đặt");
-      startDownload();
-    }
-  });
-
-  function startDownload() {
-    try {
-      console.log("Lệnh tải:", cmd);
-      const process = exec(cmd);
-      console.log(`Tiến trình tải được tạo với ID: ${downloadId}`);
-
-      // Lưu thông tin process để có thể hủy sau này
-      activeProcesses.set(downloadId, {
-        process: process,
-        outputPath: outputPath,
-        url: url,
-        startTime: Date.now(),
-        isDownloading: false,
-        pid: process.pid,
-        cmd: cmd
-      });
-
-      process.stdout.on("data", (data) => {
-        // Cập nhật tiến trình từ output
-        if (data.includes("[download]")) {
-          const progressMatch = data.match(/\[download\]\s+(\d+\.\d+)%/);
-          if (progressMatch) {
-            const progress = parseFloat(progressMatch[1]);
-            downloadProgress.set(downloadId, {
-              status: "downloading",
-              progress: progress,
-              message: `Đang tải: ${progress.toFixed(1)}%`,
-            });
-            // Nếu đã có tiến độ tải, đánh dấu là đang tải thành công
-            if (progress > 0) {
-              const processInfo = activeProcesses.get(downloadId);
-              if (processInfo) {
-                processInfo.isDownloading = true;
-              }
-            }
-          }
-        } else if (data.includes("frame=")) {
-          // Xử lý output của FFmpeg
-          const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
-          const sizeMatch = data.match(/size=\s*(\d+)kB/);
-          const speedMatch = data.match(/speed=([\d.]+)x/);
-          
-          if (timeMatch && sizeMatch && speedMatch) {
-            const time = timeMatch[1];
-            const size = sizeMatch[1];
-            const speed = speedMatch[1];
-            
-            downloadProgress.set(downloadId, {
-              status: "downloading",
-              progress: 0, // Không có phần trăm chính xác
-              message: `Đang tải: ${time} (${size}KB, ${speed}x)`,
-            });
-            
+          // Nếu đã có tiến độ tải, đánh dấu là đang tải thành công
+          if (progress > 0) {
             const processInfo = activeProcesses.get(downloadId);
             if (processInfo) {
               processInfo.isDownloading = true;
             }
           }
         }
-        console.log(`[${downloadId}] Output:`, data);
-      });
+      } else if (data.includes("frame=")) {
+        // Xử lý output của FFmpeg
+        const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
+        const sizeMatch = data.match(/size=\s*(\d+)kB/);
+        const speedMatch = data.match(/speed=([\d.]+)x/);
+        
+        if (timeMatch || sizeMatch) {
+          let message = "Đang xử lý:";
+          if (timeMatch) message += ` ${timeMatch[1]}`;
+          if (sizeMatch) message += ` (${sizeMatch[1]}KB)`;
+          if (speedMatch) message += ` tốc độ ${speedMatch[1]}x`;
+          
+          downloadProgress.set(downloadId, {
+            status: "downloading",
+            progress: -1, // Không có phần trăm chính xác
+            message: message,
+          });
+          
+          const processInfo = activeProcesses.get(downloadId);
+          if (processInfo) {
+            processInfo.isDownloading = true;
+          }
+        }
+      }
+    });
 
-      process.stderr.on("data", (data) => {
-        console.log(`[${downloadId}] stderr:`, data);
-        // Kiểm tra lỗi trong stderr
-        if (data.includes("ERROR") || data.includes("error")) {
+    process.stderr.on("data", (data) => {
+      console.log(`[${downloadId}] stderr:`, data);
+    });
+
+    process.on("close", (code) => {
+      console.log(`Tiến trình ${downloadId} kết thúc với mã: ${code}`);
+      const processInfo = activeProcesses.get(downloadId);
+      
+      if (code === 0) {
+        // Tìm file thực tế đã được tải về
+        let foundFile = null;
+        
+        if (actualFilename) {
+          // Kiểm tra xem file có tồn tại không
+          const fullPath = path.join(downloadsDir, actualFilename);
+          if (fs.existsSync(fullPath)) {
+            foundFile = actualFilename;
+          }
+        }
+        
+        // Nếu không tìm thấy bằng tên file, tìm theo prefix
+        if (!foundFile && processInfo) {
+          const files = fs.readdirSync(downloadsDir);
+          foundFile = files.find(file => file.startsWith(`${processInfo.prefix}_`));
+        }
+        
+        if (foundFile) {
+          downloadProgress.set(downloadId, {
+            status: "completed",
+            progress: 100,
+            message: "✅ Tải hoàn tất!",
+            filename: foundFile
+          });
+          console.log(`File đã tải: ${foundFile}`);
+        } else {
           downloadProgress.set(downloadId, {
             status: "error",
             progress: 0,
-            message: `❌ Lỗi: ${data.trim()}`,
+            message: "❓ Hoàn tất nhưng không tìm thấy file"
           });
         }
-      });
+      } else {
+        downloadProgress.set(downloadId, {
+          status: "error",
+          progress: 0,
+          message: `❌ Lỗi khi tải file (Mã lỗi: ${code})`
+        });
+      }
+      
+      activeProcesses.delete(downloadId);
+    });
 
-      process.on("close", (code) => {
-        console.log(`Tiến trình ${downloadId} kết thúc với mã: ${code}`);
-        const processInfo = activeProcesses.get(downloadId);
-        if (processInfo) {
-          if (code !== 0) {
-            // Nếu tiến trình kết thúc với lỗi, xóa file đang tải dở
-            try {
-              if (fs.existsSync(processInfo.outputPath)) {
-                fs.unlinkSync(processInfo.outputPath);
-              }
-              const partFile = processInfo.outputPath + ".part";
-              if (fs.existsSync(partFile)) {
-                fs.unlinkSync(partFile);
-              }
-            } catch (error) {
-              console.error(`Lỗi khi xóa file dở: ${error.message}`);
-            }
-            downloadProgress.set(downloadId, {
-              status: "error",
-              progress: 0,
-              message: "❌ Lỗi khi tải file",
-            });
-          } else {
-            // Kiểm tra xem file đã được tạo thành công chưa
-            if (fs.existsSync(processInfo.outputPath)) {
-              const downloadUrl = createDownloadUrl(fileName);
-              downloadProgress.set(downloadId, {
-                status: "completed",
-                progress: 100,
-                message: "✅ Tải hoàn tất!",
-                filePath: downloadUrl
-              });
-            } else {
-              downloadProgress.set(downloadId, {
-                status: "error",
-                progress: 0,
-                message: "❌ Lỗi: File không được tạo",
-              });
-            }
-          }
-          activeProcesses.delete(downloadId);
-        }
-      });
-
-      res.json({
-        success: true,
-        message: "Đã bắt đầu tải file",
-        downloadId: downloadId,
-      });
-    } catch (error) {
-      console.error(`Lỗi khi tạo tiến trình tải ${downloadId}:`, error);
-      downloadProgress.delete(downloadId);
-      res.json({
-        success: false,
-        message: `Lỗi khi bắt đầu tải: ${error.message}`,
-      });
-    }
+    res.json({
+      success: true,
+      message: "Đã bắt đầu tải file",
+      downloadId: downloadId,
+    });
+  } catch (error) {
+    console.error(`Lỗi khi tạo tiến trình tải ${downloadId}:`, error);
+    downloadProgress.delete(downloadId);
+    res.json({
+      success: false,
+      message: `Lỗi khi bắt đầu tải: ${error.message}`,
+    });
   }
 });
 
@@ -381,20 +350,34 @@ app.get("/progress/:downloadId", (req, res) => {
 // API để lấy danh sách video đã tải
 app.get("/downloads", (req, res) => {
   try {
+    // Lấy danh sách tất cả các video có định dạng phổ biến
     const files = fs
       .readdirSync(downloadsDir)
-      .filter((file) => file.endsWith(".mp4"))
-      .map((file) => ({
-        name: file,
-        path: `/downloads/${file}`,
-        size: fs.statSync(path.join(downloadsDir, file)).size,
-        type: file.endsWith(".m3u8") ? "m3u8" : "mp4",
-      }))
+      .filter((file) => {
+        const ext = path.extname(file).toLowerCase();
+        return ['.mp4', '.mkv', '.webm', '.mov', '.avi', '.flv', '.mpg', '.mpeg'].includes(ext);
+      })
+      .map((file) => {
+        const filePath = path.join(downloadsDir, file);
+        const stats = fs.statSync(filePath);
+        
+        return {
+          name: file,
+          path: `/downloads/${file}`,
+          size: stats.size,
+          sizeFormatted: formatFileSize(stats.size),
+          date: stats.mtime.toISOString(),
+          type: path.extname(file).substring(1),
+        };
+      })
       .sort((a, b) => {
-        // Sắp xếp theo số thứ tự trong tên file
-        const numA = parseInt(a.name.split("_")[0]);
-        const numB = parseInt(b.name.split("_")[0]);
-        return numB - numA; // Sắp xếp giảm dần
+        // Sắp xếp theo số thứ tự trong tên file hoặc theo thời gian
+        const numA = parseInt(a.name.split("_")[0]) || 0;
+        const numB = parseInt(b.name.split("_")[0]) || 0;
+        if (numA !== numB) return numB - numA; // Sắp xếp giảm dần theo số
+        
+        // Nếu số giống nhau hoặc không có số, sắp xếp theo thời gian
+        return new Date(b.date) - new Date(a.date);
       });
 
     res.json({
@@ -402,19 +385,40 @@ app.get("/downloads", (req, res) => {
       files: files,
     });
   } catch (error) {
+    console.error("Lỗi khi đọc danh sách video:", error);
     res.json({
       success: false,
-      message: "Lỗi khi đọc danh sách video",
+      message: "Lỗi khi đọc danh sách video: " + error.message,
     });
   }
 });
 
-// Phục vụ file video đã tải với hỗ trợ streaming
-app.use("/downloads", (req, res, next) => {
-  const filePath = path.join(downloadsDir, path.basename(req.path));
+// Hàm định dạng kích thước file
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+  else if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  else return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
 
-  // Kiểm tra file có tồn tại
+// Phục vụ file video đã tải với hỗ trợ streaming
+app.get("/downloads/:filename", (req, res, next) => {
+  // Xử lý tên file từ URL
+  const requestedFilename = req.params.filename;
+  
+  // Tìm file thực tế trong thư mục
+  let actualFilename = findActualFile(requestedFilename);
+  if (!actualFilename) {
+    console.error(`Không tìm thấy file: ${requestedFilename}`);
+    return res.status(404).send("File không tồn tại");
+  }
+  
+  const filePath = path.join(downloadsDir, actualFilename);
+  console.log(`Streaming file: ${filePath}`);
+
+  // Kiểm tra file có tồn tại không
   if (!fs.existsSync(filePath)) {
+    console.error(`File không tồn tại tại đường dẫn: ${filePath}`);
     return res.status(404).send("File không tồn tại");
   }
 
@@ -422,45 +426,90 @@ app.use("/downloads", (req, res, next) => {
   const fileSize = stat.size;
   const range = req.headers.range;
 
+  // Xác định kiểu MIME dựa vào phần mở rộng
+  const ext = path.extname(filePath).toLowerCase();
+  let contentType = "video/mp4"; // Mặc định
+  
+  if (ext === '.mkv') contentType = "video/x-matroska";
+  else if (ext === '.webm') contentType = "video/webm";
+  else if (ext === '.mov') contentType = "video/quicktime";
+  else if (ext === '.avi') contentType = "video/x-msvideo";
+  else if (ext === '.flv') contentType = "video/x-flv";
+  else if (ext === '.mpg' || ext === '.mpeg') contentType = "video/mpeg";
+
   if (range) {
     // Xử lý range request cho streaming
     const parts = range.replace(/bytes=/, "").split("-");
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
     const chunksize = end - start + 1;
-    const file = fs.createReadStream(filePath, { start, end });
-    const head = {
-      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-      "Accept-Ranges": "bytes",
-      "Content-Length": chunksize,
-      "Content-Type": "video/mp4",
-    };
+    
+    console.log(`Range request: ${start}-${end}/${fileSize}`);
+    
+    try {
+      const file = fs.createReadStream(filePath, { start, end });
+      const head = {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunksize,
+        "Content-Type": contentType,
+      };
 
-    res.writeHead(206, head);
-    file.pipe(res);
+      res.writeHead(206, head);
+      file.pipe(res);
+      
+      file.on('error', (err) => {
+        console.error(`Lỗi stream file: ${err.message}`);
+        if (!res.headersSent) {
+          res.status(500).send("Lỗi khi đọc file");
+        }
+      });
+    } catch (error) {
+      console.error(`Lỗi xử lý range request: ${error.message}`);
+      res.status(500).send("Lỗi khi xử lý yêu cầu streaming");
+    }
   } else {
     // Phục vụ toàn bộ file nếu không có range request
-    const head = {
-      "Content-Length": fileSize,
-      "Content-Type": "video/mp4",
-      "Accept-Ranges": "bytes",
-    };
+    try {
+      console.log(`Serving full file: ${filePath}`);
+      const head = {
+        "Content-Length": fileSize,
+        "Content-Type": contentType,
+        "Accept-Ranges": "bytes",
+      };
 
-    res.writeHead(200, head);
-    fs.createReadStream(filePath).pipe(res);
+      res.writeHead(200, head);
+      fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+      console.error(`Lỗi phục vụ file đầy đủ: ${error.message}`);
+      res.status(500).send("Lỗi khi phục vụ file");
+    }
   }
 });
 
 // Thêm route để kiểm tra trạng thái video
 app.get("/check-video/:filename", (req, res) => {
-  const filePath = path.join(downloadsDir, req.params.filename);
+  const requestedFilename = req.params.filename;
+  
+  // Tìm file thực tế trong thư mục
+  let actualFilename = findActualFile(requestedFilename);
+  if (!actualFilename) {
+    return res.json({
+      success: false,
+      message: "File không tồn tại",
+    });
+  }
+  
+  const filePath = path.join(downloadsDir, actualFilename);
 
   try {
     if (fs.existsSync(filePath)) {
       const stat = fs.statSync(filePath);
       res.json({
         success: true,
+        filename: actualFilename,
         size: stat.size,
+        sizeFormatted: formatFileSize(stat.size),
         lastModified: stat.mtime,
         isComplete: true,
       });
@@ -471,6 +520,7 @@ app.get("/check-video/:filename", (req, res) => {
       });
     }
   } catch (error) {
+    console.error(`Lỗi khi kiểm tra file: ${error.message}`);
     res.json({
       success: false,
       message: "Lỗi khi kiểm tra file: " + error.message,
@@ -478,10 +528,91 @@ app.get("/check-video/:filename", (req, res) => {
   }
 });
 
+// API hủy tải video
+app.post("/cancel-download/:downloadId", (req, res) => {
+  const { downloadId } = req.params;
+  console.log(`Yêu cầu hủy tải video với ID: ${downloadId}`);
+
+  const processInfo = activeProcesses.get(downloadId);
+  if (!processInfo) {
+    console.log(`Không tìm thấy tiến trình ${downloadId}`);
+    return res.json({ success: false, message: "Không tìm thấy tiến trình tải" });
+  }
+
+  try {
+    // Kill process và tất cả process con
+    killProcessTree(processInfo);
+
+    // Tìm các file liên quan để xóa
+    if (processInfo.prefix) {
+      const files = fs.readdirSync(downloadsDir);
+      const relatedFiles = files.filter(file => file.startsWith(processInfo.prefix + '_'));
+      
+      // Xóa tất cả các file liên quan
+      for (const file of relatedFiles) {
+        const filePath = path.join(downloadsDir, file);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`Đã xóa file: ${filePath}`);
+        }
+      }
+    }
+
+    // Xóa file .part nếu có
+    const partFiles = fs.readdirSync(downloadsDir).filter(file => file.endsWith('.part'));
+    for (const partFile of partFiles) {
+      if (partFile.startsWith(processInfo.prefix + '_')) {
+        const partFilePath = path.join(downloadsDir, partFile);
+        fs.unlinkSync(partFilePath);
+        console.log(`Đã xóa file tạm: ${partFilePath}`);
+      }
+    }
+
+    // Xóa khỏi bộ nhớ
+    activeProcesses.delete(downloadId);
+    downloadProgress.delete(downloadId);
+
+    console.log(`Đã xóa tiến trình ${downloadId} khỏi bộ nhớ`);
+    res.json({ success: true, message: "Đã hủy tải video" });
+  } catch (error) {
+    console.error(`Lỗi khi hủy tải ${downloadId}:`, error);
+    res.json({
+      success: false,
+      message: "Lỗi khi hủy tải: " + error.message,
+    });
+  }
+});
+
+// API xóa video đã tải
+app.delete("/delete-video/:filename", (req, res) => {
+  const { filename } = req.params;
+  
+  try {
+    // Tìm file thực tế trong thư mục
+    let actualFilename = findActualFile(filename);
+    if (!actualFilename) {
+      return res.json({ success: false, message: "Không tìm thấy file" });
+    }
+    
+    const filePath = path.join(downloadsDir, actualFilename);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Đã xóa file: ${filePath}`);
+      res.json({ success: true, message: "Đã xóa video" });
+    } else {
+      res.json({ success: false, message: "Không tìm thấy file" });
+    }
+  } catch (error) {
+    console.error(`Lỗi khi xóa file: ${error.message}`);
+    res.json({ success: false, message: "Lỗi khi xóa file: " + error.message });
+  }
+});
+
 // Thêm middleware xử lý CORS cho video streaming
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, DELETE, POST");
   res.header("Access-Control-Allow-Headers", "Range, Content-Type");
   res.header(
     "Access-Control-Expose-Headers",
@@ -519,68 +650,5 @@ async function startServer() {
     console.log(`🚀 Server đang chạy tại http://localhost:${port}`);
   });
 }
-
-// API hủy tải video
-app.post("/cancel-download/:downloadId", (req, res) => {
-  const { downloadId } = req.params;
-  console.log(`Yêu cầu hủy tải video với ID: ${downloadId}`);
-
-  const processInfo = activeProcesses.get(downloadId);
-  if (!processInfo) {
-    console.log(`Không tìm thấy tiến trình ${downloadId}`);
-    return res.json({ success: false, message: "Không tìm thấy tiến trình tải" });
-  }
-
-  try {
-    // Kill process và tất cả process con
-    killProcessTree(processInfo);
-
-    // Xóa file đang tải dở nếu có
-    if (fs.existsSync(processInfo.outputPath)) {
-      fs.unlinkSync(processInfo.outputPath);
-      console.log(`Đã xóa file đang tải dở: ${processInfo.outputPath}`);
-    }
-
-    // Xóa file .part nếu có
-    const partFile = processInfo.outputPath + ".part";
-    if (fs.existsSync(partFile)) {
-      fs.unlinkSync(partFile);
-      console.log(`Đã xóa file tạm: ${partFile}`);
-    }
-
-    // Xóa khỏi bộ nhớ
-    activeProcesses.delete(downloadId);
-    downloadProgress.delete(downloadId);
-
-    console.log(`Đã xóa tiến trình ${downloadId} khỏi bộ nhớ`);
-    res.json({ success: true, message: "Đã hủy tải video" });
-  } catch (error) {
-    console.error(`Lỗi khi hủy tải ${downloadId}:`, error);
-    res.json({
-      success: false,
-      message: "Lỗi khi hủy tải: " + error.message,
-    });
-  }
-});
-
-// API xóa video đã tải
-app.delete("/delete-video/:filename", (req, res) => {
-  const { filename } = req.params;
-  const filePath = path.join(downloadsDir, filename);
-
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      res.json({ success: true, message: "Đã xóa video" });
-    } else {
-      res.json({ success: false, message: "Không tìm thấy file" });
-    }
-  } catch (error) {
-    res.json({ success: false, message: "Lỗi khi xóa file: " + error.message });
-  }
-});
-
-// Serve files from downloads directory
-app.use('/downloads', express.static(path.join(__dirname, 'downloads')));
 
 startServer();
