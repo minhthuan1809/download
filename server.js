@@ -24,12 +24,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Tạo thư mục downloads nếu chưa có
-const downloadsDir = path.join(__dirname, "downloads");
+const downloadsDir = "/home/download/downloads"; // Đường dẫn tuyệt đối
 if (!fs.existsSync(downloadsDir)) {
-  fs.mkdirSync(downloadsDir, { recursive: true });
-  console.log("📁 Đã tạo thư mục downloads");
+  try {
+    fs.mkdirSync(downloadsDir, { recursive: true });
+    console.log("📁 Đã tạo thư mục downloads tại:", downloadsDir);
+  } catch (error) {
+    console.error("❌ Lỗi khi tạo thư mục downloads:", error);
+    process.exit(1);
+  }
 } else {
-  console.log("✅ Thư mục downloads đã tồn tại");
+  console.log("✅ Thư mục downloads đã tồn tại tại:", downloadsDir);
 }
 
 // Giao diện tĩnh từ thư mục public
@@ -151,6 +156,15 @@ function killProcessTree(processInfo) {
   }
 }
 
+// Cấu hình domain và đường dẫn
+const DOMAIN = "https://tai.minhthuan.site";
+const DOWNLOAD_PATH = "/downloads";
+
+// Hàm tạo đường dẫn tải về
+function createDownloadUrl(fileName) {
+  return `${DOMAIN}${DOWNLOAD_PATH}/${encodeURIComponent(fileName)}`;
+}
+
 app.post("/download", (req, res) => {
   const url = req.body.url;
   const downloadId = Date.now().toString();
@@ -164,10 +178,7 @@ app.post("/download", (req, res) => {
 
   console.log(`Bắt đầu tải file với ID: ${downloadId}`);
   console.log("URL:", url);
-  console.log(
-    "Loại link:",
-    isDirectM3U8 ? "M3U8 trực tiếp" : "Link thông thường"
-  );
+  console.log("Loại link:", isDirectM3U8 ? "M3U8 trực tiếp" : "Link thông thường");
 
   // Khởi tạo tiến trình
   downloadProgress.set(downloadId, {
@@ -279,6 +290,14 @@ app.post("/download", (req, res) => {
 
       process.stderr.on("data", (data) => {
         console.log(`[${downloadId}] stderr:`, data);
+        // Kiểm tra lỗi trong stderr
+        if (data.includes("ERROR") || data.includes("error")) {
+          downloadProgress.set(downloadId, {
+            status: "error",
+            progress: 0,
+            message: `❌ Lỗi: ${data.trim()}`,
+          });
+        }
       });
 
       process.on("close", (code) => {
@@ -306,11 +325,12 @@ app.post("/download", (req, res) => {
           } else {
             // Kiểm tra xem file đã được tạo thành công chưa
             if (fs.existsSync(processInfo.outputPath)) {
+              const downloadUrl = createDownloadUrl(fileName);
               downloadProgress.set(downloadId, {
                 status: "completed",
                 progress: 100,
                 message: "✅ Tải hoàn tất!",
-                filePath: `/downloads/${fileName}` // Thêm đường dẫn file vào thông báo
+                filePath: downloadUrl
               });
             } else {
               downloadProgress.set(downloadId, {

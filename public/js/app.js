@@ -21,6 +21,9 @@ async function downloadVideo() {
     return;
   }
 
+  downloadBtn.disabled = true;
+  downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+
   try {
     const res = await fetch('/download', {
       method: 'POST',
@@ -45,15 +48,14 @@ async function downloadVideo() {
     }
   } catch (err) {
     showErrorToast('⚠️ Lỗi kết nối: ' + err.message);
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.innerHTML = '<i class="fas fa-download"></i> Tải xuống';
     document.getElementById('videoUrl').value = '';
   }
 }
 
 async function checkProgress(downloadId) {
-  if (!activeDownloads.has(downloadId)) {
-    return;
-  }
-
   try {
     const res = await fetch(`/progress/${downloadId}`);
     const data = await res.json();
@@ -62,37 +64,36 @@ async function checkProgress(downloadId) {
       const progress = data.progress;
       const download = activeDownloads.get(downloadId);
 
-      if (download && download.status !== 'cancelled') {
-        activeDownloads.set(downloadId, {
-          ...download,
-          progress: progress.progress,
-          status: progress.status,
-          message: progress.message
-        });
+      if (download) {
+        download.progress = progress.progress;
+        download.status = progress.status;
+        download.message = progress.message;
+
+        if (progress.status === 'completed') {
+          download.message = '✅ Tải hoàn tất!';
+          loadCompletedDownloads(); // Cập nhật danh sách video đã tải
+        } else if (progress.status === 'error') {
+          download.message = progress.message || '❌ Lỗi khi tải';
+        }
 
         updateDownloadList();
 
+        // Nếu vẫn đang tải, tiếp tục kiểm tra
         if (progress.status === 'downloading') {
           setTimeout(() => checkProgress(downloadId), 1000);
         } else if (progress.status === 'completed') {
-          loadCompletedDownloads();
+          // Xóa khỏi danh sách đang tải sau 3 giây
           setTimeout(() => {
-            if (activeDownloads.has(downloadId)) {
-              activeDownloads.delete(downloadId);
-              updateDownloadList();
-            }
+            activeDownloads.delete(downloadId);
+            updateDownloadList();
           }, 3000);
         }
       }
+    } else {
+      console.error('Lỗi khi kiểm tra tiến trình:', data.message);
     }
   } catch (err) {
-    console.error('Lỗi kiểm tra tiến trình:', err);
-    const download = activeDownloads.get(downloadId);
-    if (download) {
-      download.status = 'error';
-      download.message = '❌ Lỗi kết nối';
-      updateDownloadList();
-    }
+    console.error('Lỗi khi kiểm tra tiến trình:', err);
   }
 }
 
@@ -116,17 +117,20 @@ function updateDownloadList() {
     const status = download.status || 'downloading';
     const message = download.message || 'Đang tải...';
 
+    // Thêm class cho trạng thái lỗi
+    const errorClass = status === 'error' ? 'text-danger' : '';
+    
     html += `
       <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5">
         <div class="download-info flex-1">
           <div class="download-url mb-2 font-medium truncate max-w-[600px]">${url}</div>
           <div class="progress-container my-4">
             <div class="progress-info flex justify-between mb-2">
-              <span>${message}</span>
-              <span class="progress-percentage font-semibold text-primary">${progress.toFixed(1)}%</span>
+              <span class="${errorClass}">${message}</span>
+              <span class="progress-percentage font-semibold ${status === 'error' ? 'text-danger' : 'text-primary'}">${progress.toFixed(1)}%</span>
             </div>
             <div class="progress-bar w-full h-2.5 bg-gray-light rounded overflow-hidden relative">
-              <div class="progress absolute inset-0 bg-gradient-to-r from-primary to-success transition-all duration-500 ease-out" style="width: ${progress}%"></div>
+              <div class="progress absolute inset-0 ${status === 'error' ? 'bg-danger' : 'bg-gradient-to-r from-primary to-success'} transition-all duration-500 ease-out" style="width: ${progress}%"></div>
             </div>
           </div>
         </div>
