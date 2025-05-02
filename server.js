@@ -65,25 +65,34 @@ function getNextNumber() {
   return String(downloadCount).padStart(3, "0"); // Format: 001, 002, ...
 }
 
-// Hàm kiểm tra và tăng số thứ tự nếu file đã tồn tại
-function getUniqueFileName(baseDir, originalName) {
-  const ext = path.extname(originalName);
-  const nameWithoutExt = path.basename(originalName, ext);
+// Hàm tạo tên file an toàn
+function createSafeFilename(title) {
+  // Loại bỏ các ký tự không hợp lệ trong tên file
+  return title.replace(/[<>:"/\\|?*]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/[^\w\-_]/g, '');
+}
+
+// Hàm kiểm tra và tạo tên file duy nhất
+function getUniqueFileName(baseDir, title, ext) {
+  const safeTitle = createSafeFilename(title);
   const prefix = getNextNumber();
-  const newName = `${prefix}_${nameWithoutExt}${ext}`;
-  const fullPath = path.join(baseDir, newName);
-  
+  const baseName = `${prefix}_${safeTitle}`;
+  let counter = 0;
+  let fileName = `${baseName}${ext}`;
+  let fullPath = path.join(baseDir, fileName);
+
   // Kiểm tra nếu file đã tồn tại
-  if (fs.existsSync(fullPath)) {
-    // Nếu đã tồn tại, thử tăng số thứ tự
-    let counter = 1;
-    while (fs.existsSync(path.join(baseDir, `${prefix}_${nameWithoutExt}_${counter}${ext}`))) {
-      counter++;
-    }
-    return `${prefix}_${nameWithoutExt}_${counter}${ext}`;
+  while (fs.existsSync(fullPath)) {
+    counter++;
+    fileName = `${baseName}_${counter}${ext}`;
+    fullPath = path.join(baseDir, fileName);
   }
-  
-  return newName;
+
+  return {
+    fileName: fileName,
+    fullPath: fullPath
+  };
 }
 
 // Hàm để kiểm tra process còn chạy không
@@ -168,12 +177,8 @@ app.post("/download", (req, res) => {
   });
 
   // Tạo template cho tên file với số thứ tự
-  const outputTemplate = path.join(
-    downloadsDir,
-    `\${prefix}_%(title)s.%(ext)s`
-  );
-  const prefix = getNextNumber();
-  const outputPath = outputTemplate.replace("${prefix}", prefix);
+  const { fileName, fullPath } = getUniqueFileName(downloadsDir, "video", ".mp4");
+  const outputPath = fullPath;
 
   // Tùy chỉnh lệnh tải dựa vào loại URL
   let cmd;
@@ -293,6 +298,11 @@ app.post("/download", (req, res) => {
             } catch (error) {
               console.error(`Lỗi khi xóa file dở: ${error.message}`);
             }
+            downloadProgress.set(downloadId, {
+              status: "error",
+              progress: 0,
+              message: "❌ Lỗi khi tải file",
+            });
           } else {
             // Kiểm tra xem file đã được tạo thành công chưa
             if (fs.existsSync(processInfo.outputPath)) {
@@ -300,6 +310,7 @@ app.post("/download", (req, res) => {
                 status: "completed",
                 progress: 100,
                 message: "✅ Tải hoàn tất!",
+                filePath: `/downloads/${fileName}` // Thêm đường dẫn file vào thông báo
               });
             } else {
               downloadProgress.set(downloadId, {
