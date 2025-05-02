@@ -65,28 +65,34 @@ async function checkProgress(downloadId) {
       const download = activeDownloads.get(downloadId);
 
       if (download) {
-        download.progress = progress.progress;
-        download.status = progress.status;
-        download.message = progress.message;
+        // Chỉ cập nhật nếu thông tin mới hơn
+        if (!progress.lastUpdate || progress.lastUpdate > download.lastUpdate) {
+          download.progress = progress.progress;
+          download.status = progress.status;
+          download.message = progress.message;
+          download.lastUpdate = progress.lastUpdate || Date.now();
 
-        if (progress.status === 'completed') {
-          download.message = '✅ Tải hoàn tất!';
-          loadCompletedDownloads(); // Cập nhật danh sách video đã tải
-        } else if (progress.status === 'error') {
-          download.message = progress.message || '❌ Lỗi khi tải';
-        }
+          if (progress.status === 'completed') {
+            download.message = '✅ Tải hoàn tất!';
+            loadCompletedDownloads(); // Cập nhật danh sách video đã tải
+          } else if (progress.status === 'error') {
+            download.message = progress.message || '❌ Lỗi khi tải';
+          }
 
-        updateDownloadList();
+          updateDownloadList();
 
-        // Nếu vẫn đang tải, tiếp tục kiểm tra
-        if (progress.status === 'downloading') {
-          setTimeout(() => checkProgress(downloadId), 1000);
-        } else if (progress.status === 'completed') {
-          // Xóa khỏi danh sách đang tải sau 3 giây
-          setTimeout(() => {
-            activeDownloads.delete(downloadId);
-            updateDownloadList();
-          }, 3000);
+          // Nếu vẫn đang tải, tiếp tục kiểm tra
+          if (progress.status === 'downloading') {
+            setTimeout(() => checkProgress(downloadId), 1000);
+          } else if (progress.status === 'completed') {
+            // Xóa khỏi danh sách đang tải sau 3 giây
+            setTimeout(() => {
+              if (activeDownloads.has(downloadId)) {
+                activeDownloads.delete(downloadId);
+                updateDownloadList();
+              }
+            }, 3000);
+          }
         }
       }
     } else {
@@ -116,21 +122,36 @@ function updateDownloadList() {
     const progress = download.progress || 0;
     const status = download.status || 'downloading';
     const message = download.message || 'Đang tải...';
+    const lastUpdate = download.lastUpdate || Date.now();
+    const timeAgo = Math.floor((Date.now() - lastUpdate) / 1000);
 
     // Thêm class cho trạng thái lỗi
     const errorClass = status === 'error' ? 'text-danger' : '';
+    const progressClass = status === 'error' ? 'bg-danger' : 'bg-gradient-to-r from-primary to-success';
     
+    // Thêm thông tin thời gian
+    let timeInfo = '';
+    if (timeAgo > 5) {
+      timeInfo = `<span class="text-gray text-sm">(Cập nhật ${timeAgo}s trước)</span>`;
+    }
+
     html += `
       <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5">
         <div class="download-info flex-1">
           <div class="download-url mb-2 font-medium truncate max-w-[600px]">${url}</div>
           <div class="progress-container my-4">
             <div class="progress-info flex justify-between mb-2">
-              <span class="${errorClass}">${message}</span>
-              <span class="progress-percentage font-semibold ${status === 'error' ? 'text-danger' : 'text-primary'}">${progress.toFixed(1)}%</span>
+              <div class="flex items-center gap-2">
+                <span class="${errorClass}">${message}</span>
+                ${timeInfo}
+              </div>
+              <span class="progress-percentage font-semibold ${status === 'error' ? 'text-danger' : 'text-primary'}">
+                ${progress >= 0 ? progress.toFixed(1) + '%' : '...'}
+              </span>
             </div>
             <div class="progress-bar w-full h-2.5 bg-gray-light rounded overflow-hidden relative">
-              <div class="progress absolute inset-0 ${status === 'error' ? 'bg-danger' : 'bg-gradient-to-r from-primary to-success'} transition-all duration-500 ease-out" style="width: ${progress}%"></div>
+              <div class="progress absolute inset-0 ${progressClass} transition-all duration-500 ease-out" 
+                style="width: ${progress >= 0 ? progress : 0}%"></div>
             </div>
           </div>
         </div>
