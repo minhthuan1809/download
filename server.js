@@ -27,6 +27,9 @@ const __dirname = path.dirname(__filename);
 const downloadsDir = path.join(__dirname, "downloads");
 if (!fs.existsSync(downloadsDir)) {
   fs.mkdirSync(downloadsDir);
+  console.log("📁 Đã tạo thư mục downloads");
+} else {
+  console.log("✅ Thư mục downloads đã tồn tại");
 }
 
 // Giao diện tĩnh từ thư mục public
