@@ -34,6 +34,27 @@ async function killProcessOnPort(port) {
   }
 }
 
+async function setupPythonVirtualEnv() {
+  console.log("🐍 Đang thiết lập môi trường ảo Python...");
+  try {
+    // Kiểm tra xem python3-venv đã được cài đặt chưa
+    try {
+      await execAsync("python3 -m venv --version");
+    } catch {
+      console.log("📥 Đang cài đặt python3-venv...");
+      await execAsync("sudo apt-get install -y python3-venv");
+    }
+
+    // Tạo môi trường ảo
+    await execAsync("python3 -m venv venv");
+    console.log("✅ Đã tạo môi trường ảo Python thành công");
+    return true;
+  } catch (error) {
+    console.error("❌ Lỗi khi thiết lập môi trường ảo Python:", error);
+    return false;
+  }
+}
+
 async function checkAndInstallTools() {
   console.log("=".repeat(50));
   console.log("🚀 Bắt đầu quá trình cài đặt và kiểm tra công cụ");
@@ -61,7 +82,7 @@ async function checkAndInstallTools() {
         console.log("⚠️ Trên Linux, quá trình cài đặt Python có thể yêu cầu:");
         console.log("   - Nhập mật khẩu sudo");
         console.log("   - Xác nhận cài đặt các gói phụ thuộc");
-        await execAsync("sudo apt-get update && sudo apt-get install -y python3 python3-pip");
+        await execAsync("sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-venv");
       }
       console.log("✅ Cài đặt Python hoàn tất!");
     }
@@ -92,9 +113,23 @@ async function checkAndInstallTools() {
     } catch {
       console.log("❌ yt-dlp chưa được cài đặt");
       console.log("📥 Đang cài đặt yt-dlp...");
-      const pipCmd = isWindows ? "pip" : "pip3";
-      console.log("⚠️ Đang tải và cài đặt yt-dlp qua pip...");
-      await execAsync(`${pipCmd} install yt-dlp`);
+      
+      if (isWindows) {
+        const pipCmd = "pip";
+        console.log("⚠️ Đang tải và cài đặt yt-dlp qua pip...");
+        await execAsync(`${pipCmd} install yt-dlp`);
+      } else {
+        // Trên Linux, sử dụng môi trường ảo
+        const venvSetupSuccess = await setupPythonVirtualEnv();
+        if (venvSetupSuccess) {
+          console.log("⚠️ Đang cài đặt yt-dlp trong môi trường ảo...");
+          await execAsync("venv/bin/pip install yt-dlp");
+          // Tạo alias cho yt-dlp để có thể sử dụng từ bất kỳ đâu
+          await execAsync("ln -sf $(pwd)/venv/bin/yt-dlp /usr/local/bin/yt-dlp");
+        } else {
+          throw new Error("Không thể thiết lập môi trường ảo Python");
+        }
+      }
       console.log("✅ Cài đặt yt-dlp hoàn tất!");
     }
 
