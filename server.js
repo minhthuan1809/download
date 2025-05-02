@@ -26,7 +26,7 @@ const __dirname = path.dirname(__filename);
 // Tạo thư mục downloads nếu chưa có
 const downloadsDir = path.join(__dirname, "downloads");
 if (!fs.existsSync(downloadsDir)) {
-  fs.mkdirSync(downloadsDir);
+  fs.mkdirSync(downloadsDir, { recursive: true });
   console.log("📁 Đã tạo thư mục downloads");
 } else {
   console.log("✅ Thư mục downloads đã tồn tại");
@@ -47,7 +47,17 @@ let downloadCount = 0;
 const activeProcesses = new Map();
 
 // Cấu hình multer để lưu file tạm thời
-const upload = multer({ dest: 'uploads/' });
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, downloadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Hàm lấy số thứ tự tiếp theo
 function getNextNumber() {
@@ -61,6 +71,18 @@ function getUniqueFileName(baseDir, originalName) {
   const nameWithoutExt = path.basename(originalName, ext);
   const prefix = getNextNumber();
   const newName = `${prefix}_${nameWithoutExt}${ext}`;
+  const fullPath = path.join(baseDir, newName);
+  
+  // Kiểm tra nếu file đã tồn tại
+  if (fs.existsSync(fullPath)) {
+    // Nếu đã tồn tại, thử tăng số thứ tự
+    let counter = 1;
+    while (fs.existsSync(path.join(baseDir, `${prefix}_${nameWithoutExt}_${counter}${ext}`))) {
+      counter++;
+    }
+    return `${prefix}_${nameWithoutExt}_${counter}${ext}`;
+  }
+  
   return newName;
 }
 
@@ -156,125 +178,154 @@ app.post("/download", (req, res) => {
   // Tùy chỉnh lệnh tải dựa vào loại URL
   let cmd;
   if (isDirectM3U8) {
-    cmd = `python -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0'" -o "${outputPath}" --no-check-certificates --newline`;
+    cmd = `python3 -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0'" -o "${outputPath}" --no-check-certificates --newline`;
   } else {
     // Sử dụng format "best" để tải file tốt nhất có thể
-    cmd = `python -m yt_dlp "${url}" -f "best" -o "${outputPath}" --no-check-certificates --newline`;
+    cmd = `python3 -m yt_dlp "${url}" -f "best" -o "${outputPath}" --no-check-certificates --newline`;
   }
 
-  try {
-    console.log("Lệnh tải:", cmd);
-    const process = exec(cmd);
-    console.log(`Tiến trình tải được tạo với ID: ${downloadId}`);
-
-    // Lưu thông tin process để có thể hủy sau này
-    activeProcesses.set(downloadId, {
-      process: process,
-      outputPath: outputPath,
-      url: url,
-      startTime: Date.now(),
-      isDownloading: false,
-      pid: process.pid,
-      cmd: cmd
-    });
-
-    process.stdout.on("data", (data) => {
-      // Cập nhật tiến trình từ output
-      if (data.includes("[download]")) {
-        const progressMatch = data.match(/\[download\]\s+(\d+\.\d+)%/);
-        if (progressMatch) {
-          const progress = parseFloat(progressMatch[1]);
+  // Kiểm tra xem yt-dlp đã được cài đặt chưa
+  exec("python3 -m pip list | grep yt-dlp", (error, stdout, stderr) => {
+    if (error || !stdout.includes("yt-dlp")) {
+      console.log("📥 Đang cài đặt yt-dlp...");
+      exec("python3 -m pip install yt-dlp", (installError, installStdout, installStderr) => {
+        if (installError) {
+          console.error("❌ Lỗi khi cài đặt yt-dlp:", installError);
           downloadProgress.set(downloadId, {
-            status: "downloading",
-            progress: progress,
-            message: `Đang tải: ${progress.toFixed(1)}%`,
+            status: "error",
+            progress: 0,
+            message: "❌ Lỗi: Không thể cài đặt yt-dlp",
           });
-          // Nếu đã có tiến độ tải, đánh dấu là đang tải thành công
-          if (progress > 0) {
+          return res.json({
+            success: false,
+            message: "❌ Lỗi: Không thể cài đặt yt-dlp",
+          });
+        }
+        console.log("✅ Đã cài đặt yt-dlp thành công");
+        startDownload();
+      });
+    } else {
+      console.log("✅ yt-dlp đã được cài đặt");
+      startDownload();
+    }
+  });
+
+  function startDownload() {
+    try {
+      console.log("Lệnh tải:", cmd);
+      const process = exec(cmd);
+      console.log(`Tiến trình tải được tạo với ID: ${downloadId}`);
+
+      // Lưu thông tin process để có thể hủy sau này
+      activeProcesses.set(downloadId, {
+        process: process,
+        outputPath: outputPath,
+        url: url,
+        startTime: Date.now(),
+        isDownloading: false,
+        pid: process.pid,
+        cmd: cmd
+      });
+
+      process.stdout.on("data", (data) => {
+        // Cập nhật tiến trình từ output
+        if (data.includes("[download]")) {
+          const progressMatch = data.match(/\[download\]\s+(\d+\.\d+)%/);
+          if (progressMatch) {
+            const progress = parseFloat(progressMatch[1]);
+            downloadProgress.set(downloadId, {
+              status: "downloading",
+              progress: progress,
+              message: `Đang tải: ${progress.toFixed(1)}%`,
+            });
+            // Nếu đã có tiến độ tải, đánh dấu là đang tải thành công
+            if (progress > 0) {
+              const processInfo = activeProcesses.get(downloadId);
+              if (processInfo) {
+                processInfo.isDownloading = true;
+              }
+            }
+          }
+        } else if (data.includes("frame=")) {
+          // Xử lý output của FFmpeg
+          const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
+          const sizeMatch = data.match(/size=\s*(\d+)kB/);
+          const speedMatch = data.match(/speed=([\d.]+)x/);
+          
+          if (timeMatch && sizeMatch && speedMatch) {
+            const time = timeMatch[1];
+            const size = sizeMatch[1];
+            const speed = speedMatch[1];
+            
+            downloadProgress.set(downloadId, {
+              status: "downloading",
+              progress: 0, // Không có phần trăm chính xác
+              message: `Đang tải: ${time} (${size}KB, ${speed}x)`,
+            });
+            
             const processInfo = activeProcesses.get(downloadId);
             if (processInfo) {
               processInfo.isDownloading = true;
             }
           }
         }
-      } else if (data.includes("frame=")) {
-        // Xử lý output của FFmpeg
-        const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
-        const sizeMatch = data.match(/size=\s*(\d+)kB/);
-        const speedMatch = data.match(/speed=([\d.]+)x/);
-        
-        if (timeMatch && sizeMatch && speedMatch) {
-          const time = timeMatch[1];
-          const size = sizeMatch[1];
-          const speed = speedMatch[1];
-          
-          downloadProgress.set(downloadId, {
-            status: "downloading",
-            progress: 0, // Không có phần trăm chính xác
-            message: `Đang tải: ${time} (${size}KB, ${speed}x)`,
-          });
-          
-          const processInfo = activeProcesses.get(downloadId);
-          if (processInfo) {
-            processInfo.isDownloading = true;
-          }
-        }
-      }
-      console.log(`[${downloadId}] Output:`, data);
-    });
+        console.log(`[${downloadId}] Output:`, data);
+      });
 
-    process.stderr.on("data", (data) => {
-      console.log(`[${downloadId}] stderr:`, data);
-    });
+      process.stderr.on("data", (data) => {
+        console.log(`[${downloadId}] stderr:`, data);
+      });
 
-    process.on("close", (code) => {
-      console.log(`Tiến trình ${downloadId} kết thúc với mã: ${code}`);
-      const processInfo = activeProcesses.get(downloadId);
-      if (processInfo) {
-        if (code !== 0) {
-          // Nếu tiến trình kết thúc với lỗi, xóa file đang tải dở
-          try {
+      process.on("close", (code) => {
+        console.log(`Tiến trình ${downloadId} kết thúc với mã: ${code}`);
+        const processInfo = activeProcesses.get(downloadId);
+        if (processInfo) {
+          if (code !== 0) {
+            // Nếu tiến trình kết thúc với lỗi, xóa file đang tải dở
+            try {
+              if (fs.existsSync(processInfo.outputPath)) {
+                fs.unlinkSync(processInfo.outputPath);
+              }
+              const partFile = processInfo.outputPath + ".part";
+              if (fs.existsSync(partFile)) {
+                fs.unlinkSync(partFile);
+              }
+            } catch (error) {
+              console.error(`Lỗi khi xóa file dở: ${error.message}`);
+            }
+          } else {
+            // Kiểm tra xem file đã được tạo thành công chưa
             if (fs.existsSync(processInfo.outputPath)) {
-              fs.unlinkSync(processInfo.outputPath);
+              downloadProgress.set(downloadId, {
+                status: "completed",
+                progress: 100,
+                message: "✅ Tải hoàn tất!",
+              });
+            } else {
+              downloadProgress.set(downloadId, {
+                status: "error",
+                progress: 0,
+                message: "❌ Lỗi: File không được tạo",
+              });
             }
-            const partFile = processInfo.outputPath + ".part";
-            if (fs.existsSync(partFile)) {
-              fs.unlinkSync(partFile);
-            }
-          } catch (error) {
-            console.error(`Lỗi khi xóa file dở: ${error.message}`);
           }
+          activeProcesses.delete(downloadId);
         }
-        activeProcesses.delete(downloadId);
-      }
+      });
 
-      if (code === 0) {
-        downloadProgress.set(downloadId, {
-          status: "completed",
-          progress: 100,
-          message: "✅ Tải hoàn tất!",
-        });
-      } else {
-        downloadProgress.set(downloadId, {
-          status: "error",
-          progress: 0,
-          message: "❌ Lỗi khi tải file",
-        });
-      }
-    });
-
-    res.json({
-      success: true,
-      message: "Đã bắt đầu tải file",
-      downloadId: downloadId,
-    });
-  } catch (error) {
-    console.error(`Lỗi khi tạo tiến trình tải ${downloadId}:`, error);
-    downloadProgress.delete(downloadId);
-    res.json({
-      success: false,
-      message: `Lỗi khi bắt đầu tải: ${error.message}`,
-    });
+      res.json({
+        success: true,
+        message: "Đã bắt đầu tải file",
+        downloadId: downloadId,
+      });
+    } catch (error) {
+      console.error(`Lỗi khi tạo tiến trình tải ${downloadId}:`, error);
+      downloadProgress.delete(downloadId);
+      res.json({
+        success: false,
+        message: `Lỗi khi bắt đầu tải: ${error.message}`,
+      });
+    }
   }
 });
 
