@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MINHTHUAN - Tải Video M3U8</title>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4361ee',
+            'primary-dark': '#3a56d4',
+            secondary: '#3f37c9',
+            success: '#4cc9f0',
+            danger: '#ef476f',
+            warning: '#ffd166',
+            light: '#f8f9fa',
+            dark: '#212529',
+            gray: '#6c757d',
+            'gray-light': '#e9ecef',
+            'body-bg': '#f5f7ff',
+            'card-bg': '#ffffff',
+          },
+          borderRadius: {
+            'custom': '12px',
+          },
+          boxShadow: {
+            'custom': '0 8px 30px rgba(0, 0, 0, 0.05)',
+            'custom-hover': '0 12px 30px rgba(0, 0, 0, 0.08)',
+          },
+          transitionProperty: {
+            'all': 'all',
+          },
+          transitionDuration: {
+            '300': '300ms',
+          },
+          transitionTimingFunction: {
+            'ease': 'ease',
+          },
+        }
+      }
+    }
+  </script>
+</head>
+
+<body class="bg-body-bg text-dark font-sans leading-relaxed p-5">
+  <div class="container max-w-5xl mx-auto p-5">
+    <div class="header flex items-center mb-8">
+      <div class="logo text-2xl font-bold text-primary mr-3">
+        <i class="fas fa-cloud-download-alt"></i>
+      </div>
+      <h1 class="title text-xl font-semibold">VidStream</h1>
+    </div>
+
+    <div
+      class="card bg-card-bg rounded-custom shadow-custom p-6 mb-8 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
+      <div class="card-header flex items-center mb-5 pb-3 border-b border-gray-light">
+        <div class="card-icon text-primary w-6 h-6 flex items-center justify-center">
+          <i class="fas fa-link"></i>
+        </div>
+        <h2 class="card-title text-lg font-semibold ml-2.5">Tải video từ link M3U8</h2>
+      </div>
+
+      <div class="input-group flex flex-col md:flex-row">
+        <div class="input-wrap relative flex-1">
+          <div class="input-icon absolute left-4 top-1/2 -translate-y-1/2 text-gray">
+            <i class="fas fa-link"></i>
+          </div>
+          <input type="text" id="videoUrl" placeholder="Nhập link .m3u8 hoặc http"
+            class="w-full p-4 pl-11 rounded-custom border-2 border-gray-light text-base transition-all duration-300 focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none placeholder-gray">
+        </div>
+        <button onclick="downloadVideo()" id="downloadBtn"
+          class="btn bg-primary text-white border-none px-8 py-4 rounded-custom text-base font-semibold cursor-pointer transition-all duration-300 flex items-center justify-center mt-4 md:mt-0 md:ml-4 hover:bg-primary-dark hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:bg-gray disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+          <i class="fas fa-download mr-2"></i> Tải xuống
+        </button>
+      </div>
+    </div>
+
+    <div
+      class="card bg-card-bg rounded-custom shadow-custom p-6 mb-8 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
+      <div class="card-header flex items-center mb-5 pb-3 border-b border-gray-light">
+        <div class="card-icon text-primary w-6 h-6 flex items-center justify-center">
+          <i class="fas fa-spinner"></i>
+        </div>
+        <h2 class="card-title text-lg font-semibold ml-2.5">Video đang tải</h2>
+      </div>
+
+      <div id="activeDownloads">
+        <div class="empty-state text-center p-10 text-gray hidden">
+          <i class="fas fa-cloud-download-alt text-4xl mb-4 opacity-50"></i>
+          <p>Chưa có video nào đang tải</p>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="card bg-card-bg rounded-custom shadow-custom p-6 mb-8 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
+      <div class="card-header flex items-center mb-5 pb-3 border-b border-gray-light">
+        <div class="card-icon text-primary w-6 h-6 flex items-center justify-center">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h2 class="card-title text-lg font-semibold ml-2.5">Video đã tải xong</h2>
+      </div>
+
+      <div id="completedList">
+        <div class="empty-state text-center p-10 text-gray">
+          <i class="fas fa-film text-4xl mb-4 opacity-50"></i>
+          <p>Chưa có video nào được tải</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Modal -->
+  <div id="videoModal" class="modal fixed inset-0 w-full h-full bg-black/80 backdrop-blur-sm z-50 hidden">
+    <div class="modal-content relative w-[90%] max-w-4xl mx-auto my-10 bg-white p-6 rounded-custom shadow-lg">
+      <span
+        class="close-modal absolute right-4 top-4 text-2xl cursor-pointer text-gray w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 bg-light hover:bg-gray-light hover:text-dark z-10"
+        onclick="closeVideoModal()">
+        <i class="fas fa-times"></i>
+      </span>
+      <div class="video-container relative w-full pt-[56.25%] bg-black rounded-lg overflow-hidden">
+        <video id="videoPlayer" controls playsinline class="absolute inset-0 w-full h-full rounded-lg">
+          Trình duyệt của bạn không hỗ trợ phát video.
+        </video>
+        <div id="errorMessage"
+          class="error-message absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white bg-black/80 p-4 rounded text-center hidden">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="text-center text-gray-500 mt-10">
+    <p>© 2025 MINHTHUAN. All rights reserved.</p>
+  </footer>
+
+  <script>
+    const activeDownloads = new Map();
+    let hls = null;
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    function hideError() {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.style.display = 'none';
+    }
+
+    async function downloadVideo() {
+      const url = document.getElementById('videoUrl').value;
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      if (!url) {
+        alert('❌ Vui lòng nhập link!');
+        return;
+      }
+
+      downloadBtn.disabled = true;
+      downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+
+      try {
+        const res = await fetch('/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          const downloadId = data.downloadId;
+          activeDownloads.set(downloadId, {
+            url: url,
+            progress: 0,
+            status: 'downloading',
+            message: 'Đang tải...',
+            startTime: new Date()
+          });
+          updateDownloadList();
+          checkProgress(downloadId);
+        } else {
+          alert('❌ Lỗi: ' + data.message);
+        }
+      } catch (err) {
+        alert('⚠️ Lỗi kết nối: ' + err.message);
+      } finally {
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = '<i class="fas fa-download"></i> Tải xuống';
+        document.getElementById('videoUrl').value = '';
+      }
+    }
+
+    async function checkProgress(downloadId) {
+      if (!activeDownloads.has(downloadId)) {
+        return; // Dừng kiểm tra nếu download đã bị hủy
+      }
+
+      try {
+        const res = await fetch(`/progress/${downloadId}`);
+        const data = await res.json();
+
+        if (data.success) {
+          const progress = data.progress;
+          const download = activeDownloads.get(downloadId);
+
+          if (download && download.status !== 'cancelled') {
+            activeDownloads.set(downloadId, {
+              ...download,
+              progress: progress.progress,
+              status: progress.status,
+              message: progress.message
+            });
+
+            updateDownloadList();
+
+            if (progress.status === 'downloading') {
+              setTimeout(() => checkProgress(downloadId), 1000);
+            } else if (progress.status === 'completed') {
+              loadCompletedDownloads();
+              // Xóa khỏi danh sách sau 3 giây
+              setTimeout(() => {
+                if (activeDownloads.has(downloadId)) {
+                  activeDownloads.delete(downloadId);
+                  updateDownloadList();
+                }
+              }, 3000);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi kiểm tra tiến trình:', err);
+        const download = activeDownloads.get(downloadId);
+        if (download) {
+          download.status = 'error';
+          download.message = '❌ Lỗi kết nối';
+          updateDownloadList();
+        }
+      }
+    }
+
+    function updateDownloadList() {
+      const container = document.getElementById('activeDownloads');
+
+      if (activeDownloads.size === 0) {
+        container.innerHTML = `
+          <div class="empty-state text-center p-10 text-gray">
+            <i class="fas fa-cloud-download-alt text-4xl mb-4 opacity-50"></i>
+            <p>Chưa có video nào đang tải</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      activeDownloads.forEach((download, id) => {
+        const url = download.url || 'Không xác định';
+        const progress = download.progress || 0;
+        const status = download.status || 'downloading';
+        const message = download.message || 'Đang tải...';
+
+        html += `
+          <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5">
+            <div class="download-info flex-1">
+              <div class="download-url mb-2 font-medium truncate max-w-[600px]">${url}</div>
+              <div class="progress-container my-4">
+                <div class="progress-info flex justify-between mb-2">
+                  <span>${message}</span>
+                  <span class="progress-percentage font-semibold text-primary">${progress.toFixed(1)}%</span>
+                </div>
+                <div class="progress-bar w-full h-2.5 bg-gray-light rounded overflow-hidden relative">
+                  <div class="progress absolute inset-0 bg-gradient-to-r from-primary to-success transition-all duration-500 ease-out" style="width: ${progress}%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="download-actions flex gap-2.5">
+              <button onclick="cancelDownload('${id}')" class="ml-2 action-btn bg-danger text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-danger/90">
+                <i class="fas fa-times mr-1.5"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    async function loadCompletedDownloads() {
+      try {
+        const res = await fetch('/downloads');
+        const data = await res.json();
+
+        const container = document.getElementById('completedList');
+
+        if (!data.success || data.files.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state text-center p-10 text-gray">
+              <i class="fas fa-film text-4xl mb-4 opacity-50"></i>
+              <p>Chưa có video nào được tải</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = '';
+
+        data.files.forEach((file, index) => {
+          const item = document.createElement('div');
+          item.className = 'download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5';
+          item.style.animationDelay = `${index * 0.05}s`;
+
+          item.innerHTML = `
+            <div class="download-info flex-1">
+              <div class="download-url mb-2 font-medium truncate max-w-[600px]">${file.name}</div>
+              <div class="download-meta text-gray text-sm flex items-center">
+                <i class="fas fa-hdd mr-1.5"></i> ${formatFileSize(file.size)}
+              </div>
+            </div>
+            <div class="download-actions flex gap-2.5">
+              <button onclick="playVideo('${file.path}')" class="action-btn bg-primary text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-primary-dark">
+                <i class="fas fa-play mr-1.5"></i> Xem
+              </button>
+              <button onclick="downloadFile('${file.path}')" class="action-btn bg-light text-dark border border-gray-light px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-gray-light">
+                <i class="fas fa-download mr-1.5"></i> Tải về
+              </button>
+              <button onclick="deleteVideo('${file.name}')" class="action-btn bg-danger text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-danger/90">
+                <i class="fas fa-trash mr-1.5"></i> Xóa
+              </button>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      } catch (err) {
+        console.error('Lỗi tải danh sách video:', err);
+      }
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function downloadFile(path) {
+      window.open(path, '_blank');
+    }
+
+    async function playVideo(path) {
+      const modal = document.getElementById('videoModal');
+      const video = document.getElementById('videoPlayer');
+
+      modal.style.display = 'block';
+      hideError();
+      showError('Đang kiểm tra video...');
+
+      try {
+        // Kiểm tra trạng thái video trước khi phát
+        const filename = path.split('/').pop();
+        const checkResponse = await fetch(`/check-video/${filename}`);
+        const checkData = await checkResponse.json();
+
+        if (!checkData.success) {
+          showError('Không thể phát video: ' + checkData.message);
+          return;
+        }
+
+        // Dừng phát video cũ nếu có
+        video.pause();
+        video.src = '';
+        video.load();
+
+        if (hls) {
+          hls.destroy();
+          hls = null;
+        }
+
+        // Thêm loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'loading-indicator';
+        loadingIndicator.innerHTML = `
+          <div class="spinner"></div>
+          <div class="loading-text">Đang tải video...</div>
+        `;
+        document.querySelector('.video-container').appendChild(loadingIndicator);
+
+        try {
+          if (path.includes('.m3u8')) {
+            if (Hls.isSupported()) {
+              hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 90,
+                maxBufferLength: 30,
+                maxMaxBufferLength: 600,
+                maxBufferSize: 200 * 1000 * 1000, // Tăng lên 200MB
+                xhrSetup: function (xhr, url) {
+                  xhr.withCredentials = false; // Tắt credentials để tránh lỗi CORS
+                },
+                // Thêm cấu hình để tối ưu streaming
+                progressive: true,
+                startLevel: -1,
+                abrEwmaDefaultEstimate: 500000,
+                abrMaxWithRealBitrate: true,
+                testBandwidth: true,
+                fragLoadingMaxRetry: 5,
+                manifestLoadingMaxRetry: 5,
+                levelLoadingMaxRetry: 5
+              });
+
+              hls.attachMedia(video);
+
+              hls.on(Hls.Events.MEDIA_ATTACHED, function () {
+                console.log('HLS attached to video');
+                hls.loadSource(path);
+
+                // Thêm sự kiện để theo dõi buffer
+                video.addEventListener('waiting', function () {
+                  console.log('Video is buffering...');
+                  showError('Đang tải video...');
+                });
+
+                video.addEventListener('playing', function () {
+                  console.log('Video is playing');
+                  hideError();
+                });
+              });
+
+              hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+                console.log('Manifest parsed, quality levels:', data.levels.length);
+                video.play().catch(function (error) {
+                  console.error('Autoplay failed:', error);
+                  showError('Không thể tự động phát. Vui lòng nhấn play.');
+                });
+              });
+
+              hls.on(Hls.Events.ERROR, function (event, data) {
+                console.error('HLS error:', data);
+                if (data.fatal) {
+                  switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                      showError('Lỗi kết nối mạng. Đang thử kết nối lại...');
+                      hls.startLoad();
+                      break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                      showError('Lỗi phát video. Đang thử khôi phục...');
+                      hls.recoverMediaError();
+                      break;
+                    default:
+                      showError('Không thể phát video. Vui lòng tải về để xem.');
+                      hls.destroy();
+                      break;
+                  }
+                } else {
+                  // Xử lý lỗi không nghiêm trọng
+                  switch (data.details) {
+                    case Hls.ErrorDetails.MANIFEST_LOAD_ERROR:
+                      showError('Không thể tải manifest. Đang thử lại...');
+                      break;
+                    case Hls.ErrorDetails.LEVEL_LOAD_ERROR:
+                      showError('Không thể tải chất lượng video. Đang thử lại...');
+                      break;
+                    case Hls.ErrorDetails.BUFFER_STALLED_ERROR:
+                      showError('Video bị giật lag. Đang cải thiện...');
+                      break;
+                    default:
+                      console.warn('Lỗi không nghiêm trọng:', data.details);
+                      break;
+                  }
+                }
+              });
+
+              // Thêm sự kiện theo dõi tiến trình buffer
+              hls.on(Hls.Events.FRAG_BUFFERED, function (event, data) {
+                const buffered = video.buffered;
+                if (buffered.length > 0) {
+                  const bufferedEnd = buffered.end(buffered.length - 1);
+                  const duration = video.duration;
+                  const bufferedPercent = (bufferedEnd / duration) * 100;
+                  console.log(`Đã buffer: ${bufferedPercent.toFixed(2)}%`);
+                }
+              });
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+              // Native HLS support (Safari)
+              video.src = path;
+              video.addEventListener('loadedmetadata', function () {
+                video.play().catch(function (error) {
+                  console.error('Autoplay failed:', error);
+                  showError('Không thể tự động phát. Vui lòng nhấn play.');
+                });
+              });
+
+              video.addEventListener('error', function (error) {
+                console.error('Video error:', error);
+                showError('Lỗi khi phát video. Vui lòng tải về để xem.');
+              });
+            } else {
+              showError('Trình duyệt không hỗ trợ phát video HLS. Vui lòng tải về để xem.');
+            }
+          } else {
+            // MP4 hoặc các định dạng khác
+            video.src = path;
+
+            // Thêm event listeners
+            const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay'];
+            events.forEach(event => {
+              video.addEventListener(event, () => {
+                console.log(`Video event: ${event}`);
+              }, { once: true });
+            });
+
+            // Theo dõi loading progress
+            video.addEventListener('progress', () => {
+              const buffered = video.buffered;
+              if (buffered.length > 0) {
+                const bufferedEnd = buffered.end(buffered.length - 1);
+                const duration = video.duration;
+                const bufferedPercent = (bufferedEnd / duration) * 100;
+                console.log(`Loading progress: ${bufferedPercent.toFixed(2)}%`);
+
+                if (bufferedPercent > 5) { // Đủ buffer để bắt đầu phát
+                  loadingIndicator.remove();
+                  hideError();
+                }
+              }
+            });
+
+            video.addEventListener('canplay', () => {
+              loadingIndicator.remove();
+              hideError();
+              video.play().catch(error => {
+                console.error('Autoplay failed:', error);
+                showError('Không thể tự động phát. Vui lòng nhấn play.');
+              });
+            });
+
+            video.addEventListener('error', error => {
+              console.error('Video error:', error);
+              loadingIndicator.remove();
+              showError('Lỗi khi phát video. Vui lòng tải về để xem.');
+            });
+
+            // Thêm sự kiện stalled và waiting
+            video.addEventListener('stalled', () => {
+              showError('Video bị giật lag. Đang cải thiện...');
+            });
+
+            video.addEventListener('waiting', () => {
+              showError('Đang tải video...');
+            });
+          }
+        } catch (error) {
+          console.error('Error playing video:', error);
+          loadingIndicator.remove();
+          showError('Lỗi không xác định. Vui lòng tải về để xem.');
+        }
+      } catch (error) {
+        console.error('Error checking video:', error);
+        showError('Không thể kiểm tra trạng thái video');
+      }
+    }
+
+    function closeVideoModal() {
+      const modal = document.getElementById('videoModal');
+      const video = document.getElementById('videoPlayer');
+
+      modal.style.display = 'none';
+      hideError();
+
+      if (video) {
+        video.pause();
+        video.src = '';
+        video.load();
+      }
+
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+    }
+
+    // Đóng modal khi click bên ngoài
+    window.onclick = function (event) {
+      const modal = document.getElementById('videoModal');
+      if (event.target == modal) {
+        closeVideoModal();
+      }
+    }
+
+    // Xử lý phím ESC để đóng modal
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeVideoModal();
+      }
+    });
+
+    // Tải danh sách video đã tải khi trang được tải
+    document.addEventListener('DOMContentLoaded', function () {
+      loadCompletedDownloads();
+    });
+
+    async function cancelDownload(downloadId) {
+      if (!downloadId || !activeDownloads.has(downloadId)) {
+        alert('Không tìm thấy tiến trình tải');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/cancel-download/${downloadId}`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          // Xóa khỏi danh sách ngay lập tức
+          activeDownloads.delete(downloadId);
+          updateDownloadList();
+        } else {
+          console.error('Lỗi hủy tải:', data.message);
+          // Đánh dấu là đã hủy trong giao diện
+          const download = activeDownloads.get(downloadId);
+          if (download) {
+            download.status = 'cancelled';
+            download.message = '❌ Đã hủy';
+            updateDownloadList();
+            // Xóa sau 3 giây
+            setTimeout(() => {
+              if (activeDownloads.has(downloadId)) {
+                activeDownloads.delete(downloadId);
+                updateDownloadList();
+              }
+            }, 3000);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi khi hủy tải:', err);
+        alert('Lỗi kết nối khi hủy tải: ' + err.message);
+      }
+    }
+
+    async function deleteVideo(filename) {
+      if (!confirm('Bạn có chắc chắn muốn xóa video này?')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/delete-video/${filename}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          loadCompletedDownloads();
+        } else {
+          alert('Lỗi khi xóa video: ' + data.message);
+        }
+      } catch (err) {
+        console.error('Lỗi khi xóa video:', err);
+        alert('Lỗi kết nối khi xóa video');
+      }
+    }
+  </script>
+</body>
+
+</html>

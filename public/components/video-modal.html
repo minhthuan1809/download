@@ -1,0 +1,17 @@
+<div id="videoModal" class="modal fixed inset-0 w-full h-full bg-black/80 backdrop-blur-sm z-50 hidden">
+  <div class="modal-content relative w-[90%] max-w-4xl mx-auto my-10 bg-white p-6 rounded-custom shadow-lg">
+    <span
+      class="close-modal absolute right-4 top-4 text-2xl cursor-pointer text-gray w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 bg-light hover:bg-gray-light hover:text-dark z-10"
+      onclick="closeVideoModal()">
+      <i class="fas fa-times"></i>
+    </span>
+    <div class="video-container relative w-full pt-[56.25%] bg-black rounded-lg overflow-hidden">
+      <video id="videoPlayer" controls playsinline class="absolute inset-0 w-full h-full rounded-lg">
+        Trình duyệt của bạn không hỗ trợ phát video.
+      </video>
+      <div id="errorMessage"
+        class="error-message absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white bg-black/80 p-4 rounded text-center hidden">
+      </div>
+    </div>
+  </div>
+</div> 
