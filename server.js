@@ -197,6 +197,28 @@ app.post("/download", (req, res) => {
             }
           }
         }
+      } else if (data.includes("frame=")) {
+        // Xử lý output của FFmpeg
+        const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
+        const sizeMatch = data.match(/size=\s*(\d+)kB/);
+        const speedMatch = data.match(/speed=([\d.]+)x/);
+        
+        if (timeMatch && sizeMatch && speedMatch) {
+          const time = timeMatch[1];
+          const size = sizeMatch[1];
+          const speed = speedMatch[1];
+          
+          downloadProgress.set(downloadId, {
+            status: "downloading",
+            progress: 0, // Không có phần trăm chính xác
+            message: `Đang tải: ${time} (${size}KB, ${speed}x)`,
+          });
+          
+          const processInfo = activeProcesses.get(downloadId);
+          if (processInfo) {
+            processInfo.isDownloading = true;
+          }
+        }
       }
       console.log(`[${downloadId}] Output:`, data);
     });

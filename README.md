@@ -20,6 +20,9 @@
    pip install ffmpeg-python
    pip install pycryptodomex
    winget install ffmpeg
+
+   linux
+   sudo pip3 install yt-dlp
    ```
 4. Cài đặt các thư viện Node.js:
    ```bash

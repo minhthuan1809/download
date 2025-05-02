@@ -165,7 +165,7 @@ async function checkAndInstallTools() {
       } else {
         console.log("⚠️ Trên Linux, đang cài đặt FFmpeg qua apt-get...");
         console.log("⚠️ Có thể yêu cầu nhập mật khẩu sudo");
-        await execAsync("sudo apt-get install -y ffmpeg");
+        await execAsync("sudo pip3 install yt-dlp");
         console.log("✅ FFmpeg đã được cài đặt thành công");
       }
     }
