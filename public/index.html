@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MINHTHUAN - Tải Video M3U8</title>
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
   <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
@@ -48,11 +48,92 @@
       }
     }
   </script>
+  <style>
+    /* Custom mobile tweaks */
+    @media (max-width: 640px) {
+      .container {
+        padding: 0.5rem !important;
+        max-width: 100vw !important;
+      }
+      .card {
+        padding: 1rem !important;
+        margin-bottom: 1.25rem !important;
+      }
+      .header {
+        margin-bottom: 1.5rem !important;
+      }
+      .card-header {
+        margin-bottom: 1rem !important;
+        padding-bottom: 0.75rem !important;
+      }
+      .download-item {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 0.75rem !important;
+      }
+      .download-actions {
+        width: 100%;
+        justify-content: flex-start !important;
+        gap: 0.5rem !important;
+      }
+      .download-actions button {
+        width: 100%;
+        justify-content: center !important;
+      }
+      .download-url {
+        max-width: 100vw !important;
+        word-break: break-all !important;
+      }
+      .input-group {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+      }
+      .input-wrap {
+        width: 100% !important;
+      }
+      .btn {
+        width: 100% !important;
+        margin-left: 0 !important;
+      }
+      .modal-content {
+        width: 98vw !important;
+        max-width: 98vw !important;
+        padding: 0.5rem !important;
+        margin: 0.5rem auto !important;
+      }
+      .close-modal {
+        right: 0.5rem !important;
+        top: 0.5rem !important;
+        width: 2.25rem !important;
+        height: 2.25rem !important;
+        font-size: 1.5rem !important;
+      }
+      .video-container {
+        border-radius: 0.5rem !important;
+      }
+      .empty-state {
+        padding: 2.5rem 0.5rem !important;
+      }
+      footer {
+        margin-top: 2rem !important;
+        font-size: 0.95rem !important;
+      }
+    }
+    /* Hide scrollbars for modal on mobile */
+    @media (max-width: 640px) {
+      body, html {
+        overflow-x: hidden !important;
+      }
+      #videoModal {
+        overflow-y: auto !important;
+      }
+    }
+  </style>
 </head>
 
-<body class="bg-body-bg text-dark font-sans leading-relaxed p-5">
-  <div class="container max-w-5xl mx-auto p-5">
-    <div class="header flex items-center mb-8">
+<body class="bg-body-bg text-dark font-sans leading-relaxed p-5 sm:p-5 px-2">
+  <div class="container max-w-5xl mx-auto p-5 sm:p-5 px-1">
+    <div class="header flex items-center mb-8 sm:mb-8 mb-4">
       <div class="logo text-2xl font-bold text-primary mr-3">
         <i class="fas fa-cloud-download-alt"></i>
       </div>
@@ -60,32 +141,32 @@
     </div>
 
     <div
-      class="card bg-card-bg rounded-custom shadow-custom p-6 mb-8 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
-      <div class="card-header flex items-center mb-5 pb-3 border-b border-gray-light">
+      class="card bg-card-bg rounded-custom shadow-custom p-6 sm:p-6 p-3 mb-8 sm:mb-8 mb-5 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
+      <div class="card-header flex items-center mb-5 sm:mb-5 mb-3 pb-3 sm:pb-3 pb-2 border-b border-gray-light">
         <div class="card-icon text-primary w-6 h-6 flex items-center justify-center">
           <i class="fas fa-link"></i>
         </div>
         <h2 class="card-title text-lg font-semibold ml-2.5">Tải video từ link M3U8</h2>
       </div>
 
-      <div class="input-group flex flex-col md:flex-row">
-        <div class="input-wrap relative flex-1">
+      <div class="input-group flex flex-col gap-3 sm:gap-0 sm:flex-row">
+        <div class="input-wrap relative flex-1 w-full">
           <div class="input-icon absolute left-4 top-1/2 -translate-y-1/2 text-gray">
             <i class="fas fa-link"></i>
           </div>
           <input type="text" id="videoUrl" placeholder="Nhập link .m3u8 hoặc http"
-            class="w-full p-4 pl-11 rounded-custom border-2 border-gray-light text-base transition-all duration-300 focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none placeholder-gray">
+            class="w-full p-4 pl-11 rounded-custom border-2 border-gray-light text-base transition-all duration-300 focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none placeholder-gray text-sm sm:text-base">
         </div>
         <button onclick="downloadVideo()" id="downloadBtn"
-          class="btn bg-primary text-white border-none px-8 py-4 rounded-custom text-base font-semibold cursor-pointer transition-all duration-300 flex items-center justify-center mt-4 md:mt-0 md:ml-4 hover:bg-primary-dark hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:bg-gray disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+          class="btn bg-primary text-white border-none px-8 py-4 rounded-custom text-base font-semibold cursor-pointer transition-all duration-300 flex items-center justify-center mt-3 sm:mt-0 sm:ml-4 hover:bg-primary-dark hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:bg-gray disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none w-full sm:w-auto">
           <i class="fas fa-download mr-2"></i> Tải xuống
         </button>
       </div>
     </div>
 
     <div
-      class="card bg-card-bg rounded-custom shadow-custom p-6 mb-8 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
-      <div class="card-header flex items-center mb-5 pb-3 border-b border-gray-light">
+      class="card bg-card-bg rounded-custom shadow-custom p-6 sm:p-6 p-3 mb-8 sm:mb-8 mb-5 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
+      <div class="card-header flex items-center mb-5 sm:mb-5 mb-3 pb-3 sm:pb-3 pb-2 border-b border-gray-light">
         <div class="card-icon text-primary w-6 h-6 flex items-center justify-center">
           <i class="fas fa-spinner"></i>
         </div>
@@ -93,7 +174,7 @@
       </div>
 
       <div id="activeDownloads">
-        <div class="empty-state text-center p-10 text-gray hidden">
+        <div class="empty-state text-center p-10 sm:p-10 p-5 text-gray hidden">
           <i class="fas fa-cloud-download-alt text-4xl mb-4 opacity-50"></i>
           <p>Chưa có video nào đang tải</p>
         </div>
@@ -101,8 +182,8 @@
     </div>
 
     <div
-      class="card bg-card-bg rounded-custom shadow-custom p-6 mb-8 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
-      <div class="card-header flex items-center mb-5 pb-3 border-b border-gray-light">
+      class="card bg-card-bg rounded-custom shadow-custom p-6 sm:p-6 p-3 mb-8 sm:mb-8 mb-5 transition-all duration-300 hover:shadow-custom-hover hover:-translate-y-1">
+      <div class="card-header flex items-center mb-5 sm:mb-5 mb-3 pb-3 sm:pb-3 pb-2 border-b border-gray-light">
         <div class="card-icon text-primary w-6 h-6 flex items-center justify-center">
           <i class="fas fa-check-circle"></i>
         </div>
@@ -110,7 +191,7 @@
       </div>
 
       <div id="completedList">
-        <div class="empty-state text-center p-10 text-gray">
+        <div class="empty-state text-center p-10 sm:p-10 p-5 text-gray">
           <i class="fas fa-film text-4xl mb-4 opacity-50"></i>
           <p>Chưa có video nào được tải</p>
         </div>
@@ -120,7 +201,7 @@
 
   <!-- Video Modal -->
   <div id="videoModal" class="modal fixed inset-0 w-full h-full bg-black/80 backdrop-blur-sm z-50 hidden">
-    <div class="modal-content relative w-[90%] max-w-4xl mx-auto my-10 bg-white p-6 rounded-custom shadow-lg">
+    <div class="modal-content relative w-[90%] max-w-4xl mx-auto my-10 bg-white p-6 sm:p-6 p-2 rounded-custom shadow-lg">
       <span
         class="close-modal absolute right-4 top-4 text-2xl cursor-pointer text-gray w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 bg-light hover:bg-gray-light hover:text-dark z-10"
         onclick="closeVideoModal()">
@@ -136,7 +217,7 @@
       </div>
     </div>
   </div>
-  <footer class="text-center text-gray-500 mt-10">
+  <footer class="text-center text-gray-500 mt-10 sm:mt-10 mt-5 text-sm sm:text-base">
     <p>© 2025 MINHTHUAN. All rights reserved.</p>
   </footer>
 
@@ -251,7 +332,7 @@
 
       if (activeDownloads.size === 0) {
         container.innerHTML = `
-          <div class="empty-state text-center p-10 text-gray">
+          <div class="empty-state text-center p-10 sm:p-10 p-5 text-gray">
             <i class="fas fa-cloud-download-alt text-4xl mb-4 opacity-50"></i>
             <p>Chưa có video nào đang tải</p>
           </div>
@@ -267,9 +348,9 @@
         const message = download.message || 'Đang tải...';
 
         html += `
-          <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5">
-            <div class="download-info flex-1">
-              <div class="download-url mb-2 font-medium truncate max-w-[600px]">${url}</div>
+          <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5 flex-col sm:flex-row gap-3 sm:gap-0">
+            <div class="download-info flex-1 w-full">
+              <div class="download-url mb-2 font-medium truncate max-w-full sm:max-w-[600px]">${url}</div>
               <div class="progress-container my-4">
                 <div class="progress-info flex justify-between mb-2">
                   <span>${message}</span>
@@ -279,11 +360,6 @@
                   <div class="progress absolute inset-0 bg-gradient-to-r from-primary to-success transition-all duration-500 ease-out" style="width: ${progress}%"></div>
                 </div>
               </div>
-            </div>
-            <div class="download-actions flex gap-2.5">
-              <button onclick="cancelDownload('${id}')" class="ml-2 action-btn bg-danger text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-danger/90">
-                <i class="fas fa-times mr-1.5"></i>
-              </button>
             </div>
           </div>
         `;
@@ -301,7 +377,7 @@
 
         if (!data.success || data.files.length === 0) {
           container.innerHTML = `
-            <div class="empty-state text-center p-10 text-gray">
+            <div class="empty-state text-center p-10 sm:p-10 p-5 text-gray">
               <i class="fas fa-film text-4xl mb-4 opacity-50"></i>
               <p>Chưa có video nào được tải</p>
             </div>
@@ -313,24 +389,24 @@
 
         data.files.forEach((file, index) => {
           const item = document.createElement('div');
-          item.className = 'download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5';
+          item.className = 'download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5 flex-col sm:flex-row gap-3 sm:gap-0';
           item.style.animationDelay = `${index * 0.05}s`;
 
           item.innerHTML = `
-            <div class="download-info flex-1">
-              <div class="download-url mb-2 font-medium truncate max-w-[600px]">${file.name}</div>
+            <div class="download-info flex-1 w-full">
+              <div class="download-url mb-2 font-medium truncate max-w-full sm:max-w-[600px]">${file.name}</div>
               <div class="download-meta text-gray text-sm flex items-center">
                 <i class="fas fa-hdd mr-1.5"></i> ${formatFileSize(file.size)}
               </div>
             </div>
-            <div class="download-actions flex gap-2.5">
-              <button onclick="playVideo('${file.path}')" class="action-btn bg-primary text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-primary-dark">
+            <div class="download-actions flex gap-2.5 w-full sm:w-auto">
+              <button onclick="playVideo('${file.path}')" class="action-btn bg-primary text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center justify-center hover:bg-primary-dark w-full sm:w-auto">
                 <i class="fas fa-play mr-1.5"></i> Xem
               </button>
-              <button onclick="downloadFile('${file.path}')" class="action-btn bg-light text-dark border border-gray-light px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-gray-light">
+              <button onclick="downloadFile('${file.path}')" class="action-btn bg-light text-dark border border-gray-light px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center justify-center hover:bg-gray-light w-full sm:w-auto">
                 <i class="fas fa-download mr-1.5"></i> Tải về
               </button>
-              <button onclick="deleteVideo('${file.name}')" class="action-btn bg-danger text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-danger/90">
+              <button onclick="deleteVideo('${file.name}')" class="action-btn bg-danger text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center justify-center hover:bg-danger/90 w-full sm:w-auto">
                 <i class="fas fa-trash mr-1.5"></i> Xóa
               </button>
             </div>
@@ -420,31 +496,25 @@
               hls.attachMedia(video);
 
               hls.on(Hls.Events.MEDIA_ATTACHED, function () {
-                console.log('HLS attached to video');
                 hls.loadSource(path);
 
                 // Thêm sự kiện để theo dõi buffer
                 video.addEventListener('waiting', function () {
-                  console.log('Video is buffering...');
                   showError('Đang tải video...');
                 });
 
                 video.addEventListener('playing', function () {
-                  console.log('Video is playing');
                   hideError();
                 });
               });
 
               hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-                console.log('Manifest parsed, quality levels:', data.levels.length);
                 video.play().catch(function (error) {
-                  console.error('Autoplay failed:', error);
                   showError('Không thể tự động phát. Vui lòng nhấn play.');
                 });
               });
 
               hls.on(Hls.Events.ERROR, function (event, data) {
-                console.error('HLS error:', data);
                 if (data.fatal) {
                   switch (data.type) {
                     case Hls.ErrorTypes.NETWORK_ERROR:
@@ -473,7 +543,6 @@
                       showError('Video bị giật lag. Đang cải thiện...');
                       break;
                     default:
-                      console.warn('Lỗi không nghiêm trọng:', data.details);
                       break;
                   }
                 }
@@ -486,7 +555,6 @@
                   const bufferedEnd = buffered.end(buffered.length - 1);
                   const duration = video.duration;
                   const bufferedPercent = (bufferedEnd / duration) * 100;
-                  console.log(`Đã buffer: ${bufferedPercent.toFixed(2)}%`);
                 }
               });
 
@@ -495,13 +563,11 @@
               video.src = path;
               video.addEventListener('loadedmetadata', function () {
                 video.play().catch(function (error) {
-                  console.error('Autoplay failed:', error);
                   showError('Không thể tự động phát. Vui lòng nhấn play.');
                 });
               });
 
               video.addEventListener('error', function (error) {
-                console.error('Video error:', error);
                 showError('Lỗi khi phát video. Vui lòng tải về để xem.');
               });
             } else {
@@ -514,9 +580,7 @@
             // Thêm event listeners
             const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay'];
             events.forEach(event => {
-              video.addEventListener(event, () => {
-                console.log(`Video event: ${event}`);
-              }, { once: true });
+              video.addEventListener(event, () => {}, { once: true });
             });
 
             // Theo dõi loading progress
@@ -526,7 +590,6 @@
                 const bufferedEnd = buffered.end(buffered.length - 1);
                 const duration = video.duration;
                 const bufferedPercent = (bufferedEnd / duration) * 100;
-                console.log(`Loading progress: ${bufferedPercent.toFixed(2)}%`);
 
                 if (bufferedPercent > 5) { // Đủ buffer để bắt đầu phát
                   loadingIndicator.remove();
@@ -539,13 +602,11 @@
               loadingIndicator.remove();
               hideError();
               video.play().catch(error => {
-                console.error('Autoplay failed:', error);
                 showError('Không thể tự động phát. Vui lòng nhấn play.');
               });
             });
 
             video.addEventListener('error', error => {
-              console.error('Video error:', error);
               loadingIndicator.remove();
               showError('Lỗi khi phát video. Vui lòng tải về để xem.');
             });
@@ -560,12 +621,10 @@
             });
           }
         } catch (error) {
-          console.error('Error playing video:', error);
           loadingIndicator.remove();
           showError('Lỗi không xác định. Vui lòng tải về để xem.');
         }
       } catch (error) {
-        console.error('Error checking video:', error);
         showError('Không thể kiểm tra trạng thái video');
       }
     }
@@ -609,45 +668,6 @@
       loadCompletedDownloads();
     });
 
-    async function cancelDownload(downloadId) {
-      if (!downloadId || !activeDownloads.has(downloadId)) {
-        alert('Không tìm thấy tiến trình tải');
-        return;
-      }
-
-      try {
-        const res = await fetch(`/cancel-download/${downloadId}`, {
-          method: 'POST'
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          // Xóa khỏi danh sách ngay lập tức
-          activeDownloads.delete(downloadId);
-          updateDownloadList();
-        } else {
-          console.error('Lỗi hủy tải:', data.message);
-          // Đánh dấu là đã hủy trong giao diện
-          const download = activeDownloads.get(downloadId);
-          if (download) {
-            download.status = 'cancelled';
-            download.message = '❌ Đã hủy';
-            updateDownloadList();
-            // Xóa sau 3 giây
-            setTimeout(() => {
-              if (activeDownloads.has(downloadId)) {
-                activeDownloads.delete(downloadId);
-                updateDownloadList();
-              }
-            }, 3000);
-          }
-        }
-      } catch (err) {
-        console.error('Lỗi khi hủy tải:', err);
-        alert('Lỗi kết nối khi hủy tải: ' + err.message);
-      }
-    }
-
     async function deleteVideo(filename) {
       if (!confirm('Bạn có chắc chắn muốn xóa video này?')) {
         return;
@@ -665,7 +685,6 @@
           alert('Lỗi khi xóa video: ' + data.message);
         }
       } catch (err) {
-        console.error('Lỗi khi xóa video:', err);
         alert('Lỗi kết nối khi xóa video');
       }
     }

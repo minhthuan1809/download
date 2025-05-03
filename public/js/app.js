@@ -1,6 +1,9 @@
 const activeDownloads = new Map();
 let hls = null;
 
+// Biến lưu số lần lỗi liên tiếp cho mỗi downloadId
+const downloadErrorCount = {};
+
 function showError(message) {
   const errorDiv = document.getElementById('errorMessage');
   errorDiv.textContent = message;
@@ -64,6 +67,9 @@ async function checkProgress(downloadId) {
       const progress = data.progress;
       const download = activeDownloads.get(downloadId);
 
+      // Reset số lần lỗi nếu thành công
+      downloadErrorCount[downloadId] = 0;
+
       if (download) {
         // Chỉ cập nhật nếu thông tin mới hơn
         if (!progress.lastUpdate || progress.lastUpdate > download.lastUpdate) {
@@ -99,6 +105,20 @@ async function checkProgress(downloadId) {
       console.error('Lỗi khi kiểm tra tiến trình:', data.message);
     }
   } catch (err) {
+    // Tăng số lần lỗi liên tiếp
+    if (!downloadErrorCount[downloadId]) downloadErrorCount[downloadId] = 0;
+    downloadErrorCount[downloadId]++;
+    const download = activeDownloads.get(downloadId);
+    if (download) {
+      if (downloadErrorCount[downloadId] > 5) {
+        download.status = 'error';
+        download.message = '❌ Lỗi kết nối (đã thử lại nhiều lần)';
+        updateDownloadList();
+      } else {
+        // Thử lại sau 2 giây
+        setTimeout(() => checkProgress(downloadId), 2000);
+      }
+    }
     console.error('Lỗi khi kiểm tra tiến trình:', err);
   }
 }
@@ -154,11 +174,6 @@ function updateDownloadList() {
                 style="width: ${progress >= 0 ? progress : 0}%"></div>
             </div>
           </div>
-        </div>
-        <div class="download-actions flex gap-2.5">
-          <button onclick="cancelDownload('${id}')" class="ml-2 action-btn bg-danger text-white px-3 py-2 rounded-custom text-sm cursor-pointer transition-all duration-300 flex items-center hover:bg-danger/90">
-            <i class="fas fa-times mr-1.5"></i>
-          </button>
         </div>
       </div>
     `;
