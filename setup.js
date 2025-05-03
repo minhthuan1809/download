@@ -176,7 +176,7 @@ async function checkAndInstallTools() {
     console.log("\n🚀 Đang khởi động server...");
 
     // Khởi động server
-    const { stdout, stderr } = await execAsync("node server.js");
+    const { stdout, stderr } = await execAsync("npm run start");
     console.log(stdout);
     if (stderr) console.error(stderr);
   } catch (error) {
