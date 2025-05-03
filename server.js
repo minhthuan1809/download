@@ -147,6 +147,7 @@ function findActualFile(baseFileName) {
   
   return null;
 }
+// Sửa đổi lệnh tải cho yt-dlp để đảm bảo định dạng đầu ra phù hợp với trình phát HTML5
 
 app.post("/download", (req, res) => {
   const url = req.body.url;
@@ -181,10 +182,11 @@ app.post("/download", (req, res) => {
   // Tùy chỉnh lệnh tải dựa vào loại URL
   let cmd;
   if (isDirectM3U8) {
-    // Thêm các tùy chọn để xử lý HLS tốt hơn
-    cmd = `python -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0' -c copy -bsf:a aac_adtstoasc" -o "${outputTemplate}" --no-check-certificates --newline --retries 10 --fragment-retries 10 --hls-prefer-native`;
+    // Đảm bảo định dạng đầu ra là MP4 cho tương thích tốt nhất với HTML5
+    cmd = `python -m yt_dlp "${url}" --downloader ffmpeg --downloader-args "ffmpeg_i:-headers 'User-Agent: Mozilla/5.0' -c:v libx264 -c:a aac -movflags +faststart" -o "${outputTemplate}" --no-check-certificates --newline --retries 10 --fragment-retries 10 --hls-prefer-native --merge-output-format mp4`;
   } else {
-    cmd = `python -m yt_dlp "${url}" -f "best" -o "${outputTemplate}" --no-check-certificates --newline`;
+    // Thêm tùy chọn để đảm bảo định dạng MP4
+    cmd = `python -m yt_dlp "${url}" -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" --no-check-certificates --newline --remux-video mp4`;
   }
 
   try {
