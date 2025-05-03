@@ -10,125 +10,12 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#4361ee',
-            'primary-dark': '#3a56d4',
-            secondary: '#3f37c9',
-            success: '#4cc9f0',
-            danger: '#ef476f',
-            warning: '#ffd166',
-            light: '#f8f9fa',
-            dark: '#212529',
-            gray: '#6c757d',
-            'gray-light': '#e9ecef',
-            'body-bg': '#f5f7ff',
-            'card-bg': '#ffffff',
-          },
-          borderRadius: {
-            'custom': '12px',
-          },
-          boxShadow: {
-            'custom': '0 8px 30px rgba(0, 0, 0, 0.05)',
-            'custom-hover': '0 12px 30px rgba(0, 0, 0, 0.08)',
-          },
-          transitionProperty: {
-            'all': 'all',
-          },
-          transitionDuration: {
-            '300': '300ms',
-          },
-          transitionTimingFunction: {
-            'ease': 'ease',
-          },
-        }
-      }
-    }
-  </script>
-  <style>
-    /* Custom mobile tweaks */
-    @media (max-width: 640px) {
-      .container {
-        padding: 0.5rem !important;
-        max-width: 100vw !important;
-      }
-      .card {
-        padding: 1rem !important;
-        margin-bottom: 1.25rem !important;
-      }
-      .header {
-        margin-bottom: 1.5rem !important;
-      }
-      .card-header {
-        margin-bottom: 1rem !important;
-        padding-bottom: 0.75rem !important;
-      }
-      .download-item {
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        gap: 0.75rem !important;
-      }
-      .download-actions {
-        width: 100%;
-        justify-content: flex-start !important;
-        gap: 0.5rem !important;
-      }
-      .download-actions button {
-        width: 100%;
-        justify-content: center !important;
-      }
-      .download-url {
-        max-width: 100vw !important;
-        word-break: break-all !important;
-      }
-      .input-group {
-        flex-direction: column !important;
-        gap: 0.75rem !important;
-      }
-      .input-wrap {
-        width: 100% !important;
-      }
-      .btn {
-        width: 100% !important;
-        margin-left: 0 !important;
-      }
-      .modal-content {
-        width: 98vw !important;
-        max-width: 98vw !important;
-        padding: 0.5rem !important;
-        margin: 0.5rem auto !important;
-      }
-      .close-modal {
-        right: 0.5rem !important;
-        top: 0.5rem !important;
-        width: 2.25rem !important;
-        height: 2.25rem !important;
-        font-size: 1.5rem !important;
-      }
-      .video-container {
-        border-radius: 0.5rem !important;
-      }
-      .empty-state {
-        padding: 2.5rem 0.5rem !important;
-      }
-      footer {
-        margin-top: 2rem !important;
-        font-size: 0.95rem !important;
-      }
-    }
-    /* Hide scrollbars for modal on mobile */
-    @media (max-width: 640px) {
-      body, html {
-        overflow-x: hidden !important;
-      }
-      #videoModal {
-        overflow-y: auto !important;
-      }
-    }
-  </style>
+  <script src="js/tailwind.js"></script>
+  <link rel="stylesheet" href="css/tailwind.css">
+  <!-- Thêm thư viện toastify-js cho toast -->
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  <script src="js/toast.js"></script>
 </head>
 
 <body class="bg-body-bg text-dark font-sans leading-relaxed p-5 sm:p-5 px-2">
@@ -241,7 +128,7 @@
       const downloadBtn = document.getElementById('downloadBtn');
 
       if (!url) {
-        alert('❌ Vui lòng nhập link!');
+        toast.error('Vui lòng nhập link video');
         return;
       }
 
@@ -268,10 +155,10 @@
           updateDownloadList();
           checkProgress(downloadId);
         } else {
-          alert('❌ Lỗi: ' + data.message);
+          toast.error('❌ Lỗi: ' + data.message);
         }
       } catch (err) {
-        alert('⚠️ Lỗi kết nối: ' + err.message);
+        toast.error('⚠️ Lỗi kết nối: ' + err.message);
       } finally {
         downloadBtn.disabled = false;
         downloadBtn.innerHTML = '<i class="fas fa-download"></i> Tải xuống';
@@ -427,7 +314,12 @@
     }
 
     function downloadFile(path) {
-      window.open(path, '_blank');
+      const a = document.createElement('a');
+      a.href = path;
+      a.download = ''; // hoặc: a.download = 'ten-file.mp3'
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     async function playVideo(path) {
@@ -443,6 +335,8 @@
         const filename = path.split('/').pop();
         const checkResponse = await fetch(`/check-video/${filename}`);
         const checkData = await checkResponse.json();
+
+        console.log("checkData", checkData);
 
         if (!checkData.success) {
           showError('Không thể phát video: ' + checkData.message);
@@ -681,11 +575,12 @@
 
         if (data.success) {
           loadCompletedDownloads();
+          toast.success('Đã xóa video thành công!');
         } else {
-          alert('Lỗi khi xóa video: ' + data.message);
+          toast.error('Lỗi khi xóa video: ' + data.message);
         }
       } catch (err) {
-        alert('Lỗi kết nối khi xóa video');
+        toast.error('Lỗi kết nối khi xóa video');
       }
     }
   </script>
