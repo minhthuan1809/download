@@ -6,4 +6,8 @@ export const CORS_OPTIONS = {
   methods: ["GET", "POST", "DELETE"],
   allowedHeaders: ["Content-Type", "Range"],
   exposedHeaders: ["Content-Range", "Content-Length", "Accept-Ranges"],
-}; 
+};
+
+// Maps to track download progress and active processes
+export const downloadProgress = new Map();
+export const activeProcesses = new Map(); 
