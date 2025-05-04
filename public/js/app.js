@@ -65,113 +65,73 @@ async function checkProgress(downloadId) {
 
     if (data.success) {
       const progress = data.progress;
-      const download = activeDownloads.get(downloadId);
+      const downloadInfo = activeDownloads.get(downloadId);
 
-      // Reset số lần lỗi nếu thành công
-      downloadErrorCount[downloadId] = 0;
+      if (downloadInfo) {
+        downloadInfo.progress = progress.progress;
+        downloadInfo.status = progress.status;
+        downloadInfo.message = progress.message;
 
-      if (download) {
-        // Chỉ cập nhật nếu thông tin mới hơn
-        if (!progress.lastUpdate || progress.lastUpdate > download.lastUpdate) {
-          download.progress = progress.progress;
-          download.status = progress.status;
-          download.message = progress.message;
-          download.lastUpdate = progress.lastUpdate || Date.now();
+        // Cập nhật UI
+        updateDownloadList();
 
-          if (progress.status === 'completed') {
-            download.message = '✅ Tải hoàn tất!';
-            loadCompletedDownloads(); // Cập nhật danh sách video đã tải
-          } else if (progress.status === 'error') {
-            download.message = progress.message || '❌ Lỗi khi tải';
-          }
-
-          updateDownloadList();
-
-          // Nếu vẫn đang tải, tiếp tục kiểm tra
-          if (progress.status === 'downloading') {
-            setTimeout(() => checkProgress(downloadId), 1000);
-          } else if (progress.status === 'completed') {
-            // Xóa khỏi danh sách đang tải sau 3 giây
-            setTimeout(() => {
-              if (activeDownloads.has(downloadId)) {
-                activeDownloads.delete(downloadId);
-                updateDownloadList();
-              }
-            }, 3000);
+        // Nếu đang tải, tiếp tục kiểm tra
+        if (progress.status === 'downloading') {
+          setTimeout(() => checkProgress(downloadId), 1000);
+        } else if (progress.status === 'completed') {
+          // Tải thành công
+          showSuccessToast('✅ Tải video thành công!');
+          loadCompletedDownloads(); // Tải lại danh sách video đã tải
+        } else if (progress.status === 'error') {
+          // Kiểm tra xem file có tồn tại không
+          const checkRes = await fetch(`/check-video/${progress.filename}`);
+          const checkData = await checkRes.json();
+          
+          if (checkData.success) {
+            // File tồn tại, cập nhật trạng thái thành completed
+            downloadInfo.status = 'completed';
+            downloadInfo.message = '✅ Tải hoàn tất!';
+            showSuccessToast('✅ Tải video thành công!');
+            loadCompletedDownloads();
+          } else {
+            // File không tồn tại, hiển thị lỗi
+            showErrorToast('❌ ' + progress.message);
           }
         }
       }
-    } else {
-      console.error('Lỗi khi kiểm tra tiến trình:', data.message);
     }
   } catch (err) {
-    // Tăng số lần lỗi liên tiếp
-    if (!downloadErrorCount[downloadId]) downloadErrorCount[downloadId] = 0;
-    downloadErrorCount[downloadId]++;
-    const download = activeDownloads.get(downloadId);
-    if (download) {
-      if (downloadErrorCount[downloadId] > 5) {
-        download.status = 'error';
-        download.message = '❌ Lỗi kết nối (đã thử lại nhiều lần)';
-        updateDownloadList();
-      } else {
-        // Thử lại sau 2 giây
-        setTimeout(() => checkProgress(downloadId), 2000);
-      }
-    }
     console.error('Lỗi khi kiểm tra tiến trình:', err);
   }
 }
 
 function updateDownloadList() {
   const container = document.getElementById('activeDownloads');
-
+  const emptyState = container.querySelector('.empty-state');
+  
   if (activeDownloads.size === 0) {
-    container.innerHTML = `
-      <div class="empty-state text-center p-10 text-gray">
-        <i class="fas fa-cloud-download-alt text-4xl mb-4 opacity-50"></i>
-        <p>Chưa có video nào đang tải</p>
-      </div>
-    `;
+    if (emptyState) emptyState.classList.remove('hidden');
     return;
   }
 
+  if (emptyState) emptyState.classList.add('hidden');
+  
   let html = '';
-  activeDownloads.forEach((download, id) => {
-    const url = download.url || 'Không xác định';
-    const progress = download.progress || 0;
-    const status = download.status || 'downloading';
-    const message = download.message || 'Đang tải...';
-    const lastUpdate = download.lastUpdate || Date.now();
-    const timeAgo = Math.floor((Date.now() - lastUpdate) / 1000);
-
-    // Thêm class cho trạng thái lỗi
-    const errorClass = status === 'error' ? 'text-danger' : '';
-    const progressClass = status === 'error' ? 'bg-danger' : 'bg-gradient-to-r from-primary to-success';
+  activeDownloads.forEach((info, id) => {
+    const progress = info.progress || 0;
+    const message = info.message || 'Đang tải...';
     
-    // Thêm thông tin thời gian
-    let timeInfo = '';
-    if (timeAgo > 5) {
-      timeInfo = `<span class="text-gray text-sm">(Cập nhật ${timeAgo}s trước)</span>`;
-    }
-
     html += `
-      <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5">
-        <div class="download-info flex-1">
-          <div class="download-url mb-2 font-medium truncate max-w-[600px]">${url}</div>
+      <div class="download-item flex justify-between items-center p-4 border-b border-gray-light transition-all duration-300 hover:bg-primary/5 flex-col sm:flex-row gap-3 sm:gap-0">
+        <div class="download-info flex-1 w-full">
+          <div class="download-url mb-2 font-medium truncate max-w-full sm:max-w-[600px]">${info.url}</div>
           <div class="progress-container my-4">
             <div class="progress-info flex justify-between mb-2">
-              <div class="flex items-center gap-2">
-                <span class="${errorClass}">${message}</span>
-                ${timeInfo}
-              </div>
-              <span class="progress-percentage font-semibold ${status === 'error' ? 'text-danger' : 'text-primary'}">
-                ${progress >= 0 ? progress.toFixed(1) + '%' : '...'}
-              </span>
+              <span>${message}</span>
+              <span class="progress-percentage font-semibold text-primary">${progress.toFixed(1)}%</span>
             </div>
             <div class="progress-bar w-full h-2.5 bg-gray-light rounded overflow-hidden relative">
-              <div class="progress absolute inset-0 ${progressClass} transition-all duration-500 ease-out" 
-                style="width: ${progress >= 0 ? progress : 0}%"></div>
+              <div class="progress absolute inset-0 bg-gradient-to-r from-primary to-success transition-all duration-500 ease-out" style="width: ${progress}%"></div>
             </div>
           </div>
         </div>

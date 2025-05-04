@@ -40,8 +40,24 @@ function getFfmpegCommand() {
     return rootFfmpeg;
   }
   
-  // Fallback to global ffmpeg
-  return 'ffmpeg';
+  // Check in PATH
+  try {
+    const { execSync } = require('child_process');
+    execSync(`${localFfmpeg} -version`, { stdio: 'ignore' });
+    return localFfmpeg;
+  } catch (error) {
+    console.error('FFmpeg not found in PATH');
+    return null;
+  }
+}
+
+// Function to check if ffmpeg is available
+function checkFfmpegAvailability() {
+  const ffmpegPath = getFfmpegCommand();
+  if (!ffmpegPath) {
+    throw new Error('FFmpeg không được cài đặt. Vui lòng cài đặt FFmpeg để tiếp tục.');
+  }
+  return ffmpegPath;
 }
 
 // Function to process video with ffmpeg
@@ -50,15 +66,25 @@ function processVideoWithFfmpeg(inputPath, outputPath, callback) {
     '-i', inputPath,
     '-c:v', 'libx264',
     '-c:a', 'aac',
+    '-b:v', '2M',
+    '-b:a', '192k',
     '-movflags', '+faststart',
     '-profile:v', 'high',
     '-level:v', '4.0',
     '-pix_fmt', 'yuv420p',
     '-crf', '23',
     '-preset', 'medium',
-    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', // Đảm bảo kích thước chia hết cho 2
+    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+    '-maxrate', '2.5M',
+    '-bufsize', '5M',
+    '-r', '30',
+    '-g', '60',
+    '-keyint_min', '30',
+    '-sc_threshold', '0',
     '-metadata', 'title=Video',
     '-metadata', 'artist=Video Downloader',
+    '-metadata', 'compatible_brands=qt',
+    '-y',
     outputPath
   ];
 
@@ -110,10 +136,13 @@ function logRequest(req, res, next) {
 export function handleDownload(req, res) {
   logRequest(req, res, () => {
     const url = req.body.url;
-    const format = req.body.format || 'mp4';
+    const format = req.body.format || 'mov';
     const downloadId = uuidv4();
 
     try {
+      // Kiểm tra ffmpeg trước khi tải
+      const ffmpegPath = checkFfmpegAvailability();
+      
       // Tạo thư mục downloads nếu chưa có
       if (!fs.existsSync(DOWNLOADS_DIR)) {
         fs.mkdirSync(DOWNLOADS_DIR);
@@ -132,12 +161,34 @@ export function handleDownload(req, res) {
       } else {
         ytdlpArgs = [
           url,
-          '-o', path.join(DOWNLOADS_DIR, `${downloadId}.%(ext)s`),
+          '-o', path.join(DOWNLOADS_DIR, `${downloadId}.mov`),
           '--no-playlist',
-          '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-          '--merge-output-format', 'mp4',
+          '--format', 'bestvideo[ext=mov][height<=1080]+bestaudio[ext=m4a]/best[ext=mov][height<=1080]/best[ext=mov]/best[height<=1080]',
+          '--merge-output-format', 'mov',
           '--add-metadata',
-          '--embed-thumbnail'
+          '--embed-thumbnail',
+          '--prefer-ffmpeg',
+          '--ffmpeg-location', ffmpegPath,
+          '--postprocessor-args', '-c:v libx264 -c:a aac -b:v 2M -b:a 192k -movflags +faststart -profile:v high -level:v 4.0 -pix_fmt yuv420p -crf 23 -preset medium -maxrate 2.5M -bufsize 5M -r 30 -g 60 -keyint_min 30 -sc_threshold 0 -metadata compatible_brands=qt',
+          '--max-filesize', '100M',
+          '--force-overwrites',
+          '--no-keep-video',
+          '--no-mtime',
+          '--no-write-playlist-metafiles',
+          '--no-write-info-json',
+          '--no-write-description',
+          '--no-write-thumbnail',
+          '--no-write-subtitles',
+          '--no-write-auto-subtitles',
+          '--no-write-annotations',
+          '--no-write-chapters',
+          '--no-write-info-json',
+          '--no-write-description',
+          '--no-write-thumbnail',
+          '--no-write-subtitles',
+          '--no-write-auto-subtitles',
+          '--no-write-annotations',
+          '--no-write-chapters'
         ];
       }
 
@@ -178,7 +229,18 @@ export function handleDownload(req, res) {
           downloadProgress.set(downloadId, {
             status: "downloading",
             progress,
-            message: "Đang tải...",
+            message: `Đang tải... ${progress.toFixed(1)}%`,
+            lastUpdate: Date.now(),
+          });
+        }
+
+        // Kiểm tra các thông báo lỗi phổ biến
+        if (output.includes("ERROR")) {
+          console.error(`[${downloadId}] Error detected in output:`, output);
+          downloadProgress.set(downloadId, {
+            status: "error",
+            progress: 0,
+            message: "❌ Lỗi khi tải video. Vui lòng thử lại.",
             lastUpdate: Date.now(),
           });
         }
@@ -187,71 +249,152 @@ export function handleDownload(req, res) {
         const filenameMatch = output.match(/\[download\] Destination: (.+)/);
         if (filenameMatch) {
           actualFilename = path.basename(filenameMatch[1]);
+          console.log(`[${downloadId}] Actual filename detected:`, actualFilename);
         }
       });
 
       process.stderr.on("data", (data) => {
-        console.error(`[${downloadId}] Error: ${data}`);
-      });
-
-      process.on("close", (code) => {
-        console.log(`Tiến trình ${downloadId} kết thúc với mã: ${code}`);
-        const processInfo = activeProcesses.get(downloadId);
+        const errorOutput = data.toString();
+        console.error(`[${downloadId}] Error output:`, errorOutput);
         
-        if (code === 0) {
-          let foundFile = null;
-          
-          if (actualFilename) {
-            const fullPath = path.join(DOWNLOADS_DIR, actualFilename);
-            if (fs.existsSync(fullPath)) {
-              foundFile = actualFilename;
-            }
-          }
-          
-          if (!foundFile && processInfo) {
-            const files = fs.readdirSync(DOWNLOADS_DIR);
-            foundFile = files.find(file => file.startsWith(`${processInfo.prefix}_`));
-          }
-          
-          if (foundFile) {
-            const inputPath = path.join(DOWNLOADS_DIR, foundFile);
-            const outputPath = path.join(DOWNLOADS_DIR, `processed_${foundFile}`);
-            
-            // Xử lý video với ffmpeg
-            processVideoWithFfmpeg(inputPath, outputPath, (error, finalPath) => {
-              if (error) {
-                console.error('Error processing video:', error);
-                downloadProgress.set(downloadId, {
-                  status: "error",
-                  progress: 0,
-                  message: "❌ Lỗi khi xử lý video",
-                  lastUpdate: Date.now()
-                });
-              } else {
-                const finalFilename = path.basename(finalPath);
-                downloadProgress.set(downloadId, {
-                  status: "completed",
-                  progress: 100,
-                  message: "✅ Tải hoàn tất!",
-                  filename: finalFilename,
-                  lastUpdate: Date.now()
-                });
-                console.log(`File đã tải và xử lý: ${finalFilename}`);
-              }
-            });
-          } else {
-            downloadProgress.set(downloadId, {
-              status: "error",
-              progress: 0,
-              message: "❓ Hoàn tất nhưng không tìm thấy file",
-              lastUpdate: Date.now()
-            });
-          }
-        } else {
+        // Cập nhật trạng thái lỗi nếu phát hiện
+        if (errorOutput.includes("ERROR") || errorOutput.includes("Error")) {
           downloadProgress.set(downloadId, {
             status: "error",
             progress: 0,
-            message: `❌ Lỗi khi tải file (Mã lỗi: ${code})`,
+            message: "❌ Lỗi khi tải video. Vui lòng thử lại.",
+            lastUpdate: Date.now(),
+          });
+        }
+      });
+
+      process.on("close", (code) => {
+        console.log(`[${downloadId}] Process ended with code:`, code);
+        const processInfo = activeProcesses.get(downloadId);
+        
+        // Kiểm tra mã lỗi từ yt-dlp
+        if (code !== 0) {
+          console.error(`[${downloadId}] Download failed with code:`, code);
+          downloadProgress.set(downloadId, {
+            status: "error",
+            progress: 0,
+            message: "❌ Tải thất bại! Vui lòng thử lại.",
+            lastUpdate: Date.now()
+          });
+          activeProcesses.delete(downloadId);
+          return;
+        }
+
+        // Kiểm tra xem file đã được tải về chưa
+        const files = fs.readdirSync(DOWNLOADS_DIR);
+        let foundFile = null;
+        
+        if (actualFilename) {
+          const fullPath = path.join(DOWNLOADS_DIR, actualFilename);
+          if (fs.existsSync(fullPath)) {
+            foundFile = actualFilename;
+            console.log(`[${downloadId}] Found downloaded file:`, foundFile);
+          }
+        }
+        
+        if (!foundFile) {
+          // Tìm file theo pattern
+          foundFile = files.find(file => file.startsWith(downloadId));
+          if (foundFile) {
+            console.log(`[${downloadId}] Found file by pattern:`, foundFile);
+          }
+        }
+        
+        if (foundFile) {
+          const inputPath = path.join(DOWNLOADS_DIR, foundFile);
+          const outputPath = path.join(DOWNLOADS_DIR, `${downloadId}.mov`);
+          
+          // Kiểm tra kích thước file
+          const stats = fs.statSync(inputPath);
+          if (stats.size === 0) {
+            console.error(`[${downloadId}] Downloaded file is empty`);
+            downloadProgress.set(downloadId, {
+              status: "error",
+              progress: 0,
+              message: "❌ File tải về bị lỗi (kích thước = 0)",
+              lastUpdate: Date.now()
+            });
+            // Xóa file lỗi
+            try {
+              fs.unlinkSync(inputPath);
+            } catch (err) {
+              console.error('[${downloadId}] Error deleting corrupted file:', err);
+            }
+            return;
+          }
+
+          // Chuyển đổi sang MOV
+          const ffmpegArgs = [
+            '-i', inputPath,
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-b:v', '2M',
+            '-b:a', '192k',
+            '-movflags', '+faststart',
+            '-profile:v', 'high',
+            '-level:v', '4.0',
+            '-pix_fmt', 'yuv420p',
+            '-crf', '23',
+            '-preset', 'medium',
+            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+            '-maxrate', '2.5M',
+            '-bufsize', '5M',
+            '-r', '30',
+            '-g', '60',
+            '-keyint_min', '30',
+            '-sc_threshold', '0',
+            '-metadata', 'title=Video',
+            '-metadata', 'artist=Video Downloader',
+            '-metadata', 'compatible_brands=qt',
+            '-y',
+            outputPath
+          ];
+
+          const ffmpegProcess = spawn(getFfmpegCommand(), ffmpegArgs);
+          
+          ffmpegProcess.stderr.on('data', (data) => {
+            console.log(`[${downloadId}] FFmpeg: ${data}`);
+          });
+
+          ffmpegProcess.on('close', (ffmpegCode) => {
+            if (ffmpegCode === 0) {
+              console.log(`[${downloadId}] FFmpeg conversion completed successfully`);
+              // Xóa file gốc sau khi chuyển đổi
+              try {
+                fs.unlinkSync(inputPath);
+                console.log(`[${downloadId}] Original file deleted:`, inputPath);
+              } catch (err) {
+                console.error(`[${downloadId}] Error deleting original file:`, err);
+              }
+              
+              downloadProgress.set(downloadId, {
+                status: "completed",
+                progress: 100,
+                message: "✅ Tải hoàn tất!",
+                filename: `${downloadId}.mov`,
+                lastUpdate: Date.now()
+              });
+            } else {
+              console.error(`[${downloadId}] FFmpeg conversion failed with code ${ffmpegCode}`);
+              downloadProgress.set(downloadId, {
+                status: "error",
+                progress: 0,
+                message: "❌ Lỗi khi chuyển đổi video",
+                lastUpdate: Date.now()
+              });
+            }
+          });
+        } else {
+          console.error(`[${downloadId}] No file found after download`);
+          downloadProgress.set(downloadId, {
+            status: "error",
+            progress: 0,
+            message: "❌ Không tìm thấy file sau khi tải",
             lastUpdate: Date.now()
           });
         }
@@ -330,10 +473,7 @@ export function getDownloadsList(req, res) {
     try {
       const files = fs
         .readdirSync(DOWNLOADS_DIR)
-        .filter((file) => {
-          const ext = path.extname(file).toLowerCase();
-          return ['.mp4', '.mkv', '.webm', '.mov', '.avi', '.flv', '.mpg', '.mpeg', '.m4a' , '.mp3' ].includes(ext);
-        })
+        // Show all files, do not filter by extension
         .map((file) => {
           const filePath = path.join(DOWNLOADS_DIR, file);
           const stats = fs.statSync(filePath);

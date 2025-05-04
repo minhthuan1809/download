@@ -45,6 +45,8 @@ export function streamVideo(req, res) {
       "Accept-Ranges": "bytes",
       "Content-Length": chunksize,
       "Content-Type": "video/mp4",
+      "Cache-Control": "public, max-age=31536000",
+      "Access-Control-Allow-Origin": "*"
     };
 
     res.writeHead(206, head);
@@ -53,6 +55,8 @@ export function streamVideo(req, res) {
     const head = {
       "Content-Length": fileSize,
       "Content-Type": "video/mp4",
+      "Cache-Control": "public, max-age=31536000",
+      "Access-Control-Allow-Origin": "*"
     };
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);

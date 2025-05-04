@@ -1,59 +1,119 @@
 # Video Downloader
 
-Ứng dụng tải video từ các nguồn khác nhau, hỗ trợ đặc biệt cho định dạng M3U8.
+Ứng dụng tải video từ các nền tảng khác nhau.
 
-## Tính năng
+## Yêu cầu hệ thống
 
-- Tải video từ link M3U8
-- Hiển thị tiến trình tải
-- Hỗ trợ tải nhiều video cùng lúc
-- Lưu danh sách video đã tải
-- Giao diện thân thiện, dễ sử dụng
+- Node.js phiên bản 20.x
+- Python 3.x
+- FFmpeg
+- yt-dlp
 
 ## Cài đặt
 
-1. Cài đặt Node.js và npm
-2. Cài đặt Python 3.x
-3. Cài đặt các công cụ cần thiết:
-   ```bash
-   pip install yt-dlp
-   pip install ffmpeg-python
-   pip install pycryptodomex
-   winget install ffmpeg
+### 1. Cài đặt Node.js 20.x
 
-   linux
-   sudo pip3 install yt-dlp
-   ```
-4. Cài đặt các thư viện Node.js:
-   ```bash
-   npm install
-   ```
+#### Windows
+```bash
+winget install OpenJS.NodeJS.LTS
+```
 
-## Cách sử dụng
+#### Ubuntu/Debian
+```bash
+# Xóa phiên bản Node.js cũ (nếu có)
+sudo apt-get remove nodejs npm
 
-1. Khởi động server:
-   ```bash
-   node server.js
-   ```
-2. Mở trình duyệt và truy cập: `http://localhost:3000`
-3. Dán link video M3U8 vào ô nhập liệu
-4. Nhấn nút "Tải xuống" để bắt đầu tải
-5. Xem tiến trình tải trong danh sách tải
-6. Video sẽ được lưu vào thư mục hiện tại
+# Thêm NodeSource repository
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 
-## Lưu ý
+# Cài đặt Node.js
+sudo apt-get install -y nodejs
 
-- Đảm bảo link video hợp lệ
-- Kiểm tra kết nối internet
-- Video sẽ được lưu với tên tự động dựa trên tiêu đề
-- Có thể tải nhiều video cùng lúc
-- Tiến trình tải sẽ được hiển thị chi tiết
+# Kiểm tra phiên bản
+node --version
+```
 
-## Hỗ trợ
+### 2. Cài đặt Python và các công cụ cần thiết
 
-Nếu gặp vấn đề, vui lòng kiểm tra:
+#### Windows
+```bash
+winget install Python.Python.3.11
+```
 
-1. Link video có hợp lệ không
-2. Đã cài đặt đầy đủ các công cụ cần thiết chưa
-3. Kết nối internet có ổn định không
-# download
+#### Ubuntu/Debian
+```bash
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip python3-venv ffmpeg
+```
+
+### 3. Cài đặt yt-dlp
+
+#### Windows
+```bash
+pip install yt-dlp
+```
+
+#### Ubuntu/Debian
+```bash
+# Tạo môi trường ảo Python
+python3 -m venv venv
+
+# Kích hoạt môi trường ảo
+source venv/bin/activate
+
+# Cài đặt yt-dlp
+pip install yt-dlp
+
+# Tạo alias cho yt-dlp
+sudo ln -sf $(pwd)/venv/bin/yt-dlp /usr/local/bin/yt-dlp
+```
+
+### 4. Cài đặt dependencies của ứng dụng
+
+```bash
+# Cài đặt các package Node.js
+npm install
+```
+
+## Chạy ứng dụng
+
+### Chế độ phát triển
+```bash
+npm run dev
+```
+
+### Chế độ production
+```bash
+npm start
+```
+
+Ứng dụng sẽ chạy tại địa chỉ: http://localhost:3000
+
+## Tính năng
+
+- Tải video từ nhiều nền tảng khác nhau
+- Hỗ trợ tải video với chất lượng cao
+- Tải video với tốc độ nhanh
+- Giao diện web thân thiện với người dùng
+
+## Xử lý lỗi thường gặp
+
+1. Lỗi "Unexpected token '??='"
+   - Nguyên nhân: Phiên bản Node.js không tương thích
+   - Giải pháp: Cài đặt Node.js phiên bản 20.x
+
+2. Lỗi "FFmpeg not found"
+   - Nguyên nhân: FFmpeg chưa được cài đặt
+   - Giải pháp: Cài đặt FFmpeg theo hướng dẫn ở trên
+
+3. Lỗi "yt-dlp not found"
+   - Nguyên nhân: yt-dlp chưa được cài đặt
+   - Giải pháp: Cài đặt yt-dlp theo hướng dẫn ở trên
+
+## Đóng góp
+
+Mọi đóng góp đều được hoan nghênh! Vui lòng tạo issue hoặc pull request để đóng góp.
+
+## Giấy phép
+
+MIT License
